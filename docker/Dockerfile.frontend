@@ -1,0 +1,15 @@
+FROM docker.m.daocloud.io/node:20-alpine AS builder
+WORKDIR /app
+
+COPY note-front/package.json note-front/package-lock.json ./
+RUN npm ci
+
+COPY note-front/index.html ./
+COPY note-front/vite.config.js ./
+COPY note-front/public ./public
+COPY note-front/src ./src
+RUN npm run build
+
+FROM docker.m.daocloud.io/alpine:3.19
+COPY --from=builder /app/dist /dist_source
+CMD ["sh", "-c", "rm -rf /static_files/* && cp -a /dist_source/. /static_files/ && echo 'Frontend files copied successfully' && ls -la /static_files/"]

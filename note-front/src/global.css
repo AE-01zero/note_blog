@@ -1,0 +1,113 @@
+html,
+body {
+  overflow-y: scroll !important;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  display: block !important;
+  place-items: initial !important;
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 10% 10%, rgba(255, 196, 215, 0.26), transparent 24%),
+    radial-gradient(circle at 88% 14%, rgba(134, 220, 234, 0.2), transparent 22%),
+    linear-gradient(135deg, #eef3ff 0%, #f6f9ff 30%, #fff8f3 70%, #f4f9ff 100%);
+}
+
+#app,
+.main-container,
+.tab-container,
+.main-tabs {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+#app {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: initial !important;
+}
+
+.el-button {
+  border-radius: 16px !important;
+  font-weight: 600 !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  border: none !important;
+  box-shadow: 0 8px 22px rgba(94, 115, 170, 0.14) !important;
+}
+
+.el-button--primary {
+  background: linear-gradient(135deg, #6f8fff 0%, #86dcea 58%, #ffbfd7 100%) !important;
+  color: #fff !important;
+}
+
+.el-button--primary:hover {
+  background: linear-gradient(135deg, #5c79df 0%, #79d0df 58%, #f5aac9 100%) !important;
+  transform: translateY(-2px) !important;
+  box-shadow: 0 12px 28px rgba(94, 115, 170, 0.22) !important;
+}
+
+.el-button--success {
+  background: linear-gradient(135deg, #59cda2 0%, #35b89a 100%) !important;
+}
+
+.el-button--warning {
+  background: linear-gradient(135deg, #ffd28d 0%, #ffb574 100%) !important;
+  color: #7c4f2d !important;
+}
+
+.el-button--danger {
+  background: linear-gradient(135deg, #ff9da8 0%, #ff7d8a 100%) !important;
+}
+
+.el-button--info {
+  background: linear-gradient(135deg, #95a6c8 0%, #7889ab 100%) !important;
+}
+
+.el-input__wrapper {
+  border-radius: 16px !important;
+  border: 1px solid rgba(166, 188, 236, 0.24) !important;
+  box-shadow: 0 8px 18px rgba(94, 115, 170, 0.1) !important;
+  transition: all 0.3s ease !important;
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.el-input__wrapper:hover {
+  border-color: rgba(111, 143, 255, 0.28) !important;
+  box-shadow: 0 12px 24px rgba(94, 115, 170, 0.14) !important;
+}
+
+.el-input__wrapper.is-focus {
+  border-color: #6f8fff !important;
+  box-shadow: 0 0 0 4px rgba(111, 143, 255, 0.12) !important;
+}
+
+.el-tag {
+  border-radius: 12px !important;
+  font-weight: 600 !important;
+  border: none !important;
+  padding: 4px 12px !important;
+}
+
+.el-avatar {
+  box-shadow: 0 8px 18px rgba(94, 115, 170, 0.16) !important;
+}
+
+.el-dialog {
+  border-radius: 24px !important;
+  overflow: hidden !important;
+  box-shadow: 0 24px 72px rgba(94, 115, 170, 0.22) !important;
+  backdrop-filter: blur(20px) !important;
+}
+
+.el-card {
+  border-radius: 22px !important;
+  border: 1px solid rgba(166, 188, 236, 0.2) !important;
+  box-shadow: 0 16px 42px rgba(94, 115, 170, 0.12) !important;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(247, 250, 255, 0.92) 100%) !important;
+  backdrop-filter: blur(20px) !important;
+}
