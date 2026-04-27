@@ -16,14 +16,6 @@
 
 后端已经集成 PostgreSQL、Redis、Flyway、Sa-Token、LangChain4j、pgvector 和文件存储，前端已经包含笔记、博客、共享知识库、AI 配置等主要页面。
 
-这次整理的重点，是把项目变成适合直接上传 Git 的状态：
-
-- 去掉真实数据库密码、Redis 密码、JWT 密钥
-- 去掉真实模型 API Key，统一改成 `sk-xxxxxx`
-- 增加 Git / Docker 忽略规则
-- 把 Docker 构建改成从源码构建，而不是依赖本地 `dist` / `target`
-- 增加可直接公开提交的配置模板和根 README
-
 ## 技术栈
 
 ### 前端
@@ -163,58 +155,3 @@ docker compose up --build -d
 
 - 前端 / Nginx：`http://127.0.0.1:3001`
 - 后端 API：`http://127.0.0.1:8889`
-
-## Git 上传建议
-
-适合提交到仓库的文件：
-
-- `README.md`
-- `.gitignore`
-- `.dockerignore`
-- `.gitattributes`
-- `.editorconfig`
-- `docker/docker-compose.example.yml`
-- `docker/.env.example`
-- `docker/config/application-docker.example.yml`
-- `initialization-note-side/src/main/resources/application.example.yml`
-- `note-front/.env.example`
-- 前后端源码与 SQL 迁移脚本
-
-不建议提交的文件：
-
-- `note-front/node_modules`
-- `note-front/dist`
-- `initialization-note-side/target`
-- `initialization-note-side/maven-local-settings.xml`
-- `initialization-note-side/src/main/resources/application.yml`
-- `docker/config/application-docker.yml`
-- `docker/docker-compose.yml`
-- `docker/.env`
-- 任意包含真实密码、Token、API Key 的本地配置
-
-## 额外说明
-
-- `note-front/inteface.md` 可以作为接口说明补充材料
-- 根目录的 `package.json` 和 `package-lock.json` 基本是空壳文件，后续可以直接删除
-- 旧文件里有部分中文注释存在编码问题，后续统一转成 UTF-8 会更利于协作
-
-## Git 上传命令
-
-如果这是第一次初始化仓库：
-
-```powershell
-git init
-git add .
-git commit -m "chore: prepare repo for git upload"
-git branch -M main
-git remote add origin <你的仓库地址>
-git push -u origin main
-```
-
-如果仓库已经初始化：
-
-```powershell
-git add .
-git commit -m "chore: sanitize configs and docs"
-git push
-```
