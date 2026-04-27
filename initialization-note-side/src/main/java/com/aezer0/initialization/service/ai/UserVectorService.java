@@ -1,6 +1,8 @@
 package com.aezer0.initialization.service.ai;
 
 import com.aezer0.initialization.config.ai.PgVectorConnectionPool;
+import com.aezer0.initialization.domain.FileUpInfo;
+import com.aezer0.initialization.service.FileInfoService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.document.Document;
@@ -35,6 +37,9 @@ public class UserVectorService implements EmbeddingStore<TextSegment> {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @Autowired
+    private FileInfoService fileInfoService;
 
     private EmbeddingModel embeddingModel() {
         return applicationContext.getBean(EmbeddingModel.class);
@@ -92,6 +97,7 @@ public class UserVectorService implements EmbeddingStore<TextSegment> {
                             metadata.put("originalMetadata", doc.metadata().toString());
                         }
                     }
+                    mergeFileMetadata(metadata, fileId);
                     
                     // 将embedding转换为PostgreSQL向量格式的字符串
                     List<Float> vectorList = embedding.vectorAsList();
@@ -405,15 +411,33 @@ public class UserVectorService implements EmbeddingStore<TextSegment> {
         boolean hasCategory = categoryFilter != null && !categoryFilter.trim().isEmpty();
         String sql = hasCategory
             ? """
-              SELECT d.embedding_id, d.text, d.metadata, d.embedding <=> CAST(? AS vector) as distance
+              SELECT d.embedding_id, d.text, COALESCE(
+                     jsonb_set(
+                         d.metadata,
+                         '{sourceName}',
+                         to_jsonb(COALESCE(f.source_note_title, f.original_filename, f.file_name)),
+                         true
+                     ),
+                     d.metadata
+                 ) AS metadata,
+                 d.embedding <=> CAST(? AS vector) as distance
               FROM documents d LEFT JOIN t_file_info f ON d.file_id = f.id
               WHERE d.knowledge_base_id = ? AND d.knowledge_base_type = 1 AND f.category = ?
               ORDER BY distance LIMIT ?
               """
             : """
-              SELECT embedding_id, text, metadata, embedding <=> CAST(? AS vector) as distance
-              FROM documents
-              WHERE knowledge_base_id = ? AND knowledge_base_type = 1
+              SELECT d.embedding_id, d.text, COALESCE(
+                     jsonb_set(
+                         d.metadata,
+                         '{sourceName}',
+                         to_jsonb(COALESCE(f.source_note_title, f.original_filename, f.file_name)),
+                         true
+                     ),
+                     d.metadata
+                 ) AS metadata,
+                 d.embedding <=> CAST(? AS vector) as distance
+              FROM documents d LEFT JOIN t_file_info f ON d.file_id = f.id
+              WHERE d.knowledge_base_id = ? AND d.knowledge_base_type = 1
               ORDER BY distance LIMIT ?
               """;
 
@@ -454,8 +478,8 @@ public class UserVectorService implements EmbeddingStore<TextSegment> {
 
         boolean hasCategory = categoryFilter != null && !categoryFilter.trim().isEmpty();
         String sql = hasCategory
-            ? "SELECT d.embedding_id, d.text, d.metadata FROM documents d LEFT JOIN t_file_info f ON d.file_id = f.id WHERE d.knowledge_base_id = ? AND d.knowledge_base_type = 1 AND f.category = ? AND d.text ILIKE ? LIMIT ?"
-            : "SELECT embedding_id, text, metadata FROM documents WHERE knowledge_base_id = ? AND knowledge_base_type = 1 AND text ILIKE ? LIMIT ?";
+            ? "SELECT d.embedding_id, d.text, COALESCE(jsonb_set(d.metadata, '{sourceName}', to_jsonb(COALESCE(f.source_note_title, f.original_filename, f.file_name)), true), d.metadata) AS metadata FROM documents d LEFT JOIN t_file_info f ON d.file_id = f.id WHERE d.knowledge_base_id = ? AND d.knowledge_base_type = 1 AND f.category = ? AND d.text ILIKE ? LIMIT ?"
+            : "SELECT d.embedding_id, d.text, COALESCE(jsonb_set(d.metadata, '{sourceName}', to_jsonb(COALESCE(f.source_note_title, f.original_filename, f.file_name)), true), d.metadata) AS metadata FROM documents d LEFT JOIN t_file_info f ON d.file_id = f.id WHERE d.knowledge_base_id = ? AND d.knowledge_base_type = 1 AND d.text ILIKE ? LIMIT ?";
 
         try (Connection connection = connectionPool.getConnection();
              PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -707,6 +731,27 @@ public class UserVectorService implements EmbeddingStore<TextSegment> {
             Map<String, Object> fallback = new HashMap<>();
             fallback.put("raw", json);
             return fallback;
+        }
+    }
+
+    private void mergeFileMetadata(Map<String, Object> metadata, Long fileId) {
+        if (fileId == null) {
+            return;
+        }
+        FileUpInfo fileInfo = fileInfoService.getById(fileId);
+        if (fileInfo == null) {
+            return;
+        }
+        putIfHasText(metadata, "fileName", fileInfo.getFileName());
+        putIfHasText(metadata, "originalFilename", fileInfo.getOriginalFilename());
+        putIfHasText(metadata, "sourceNoteTitle", fileInfo.getSourceNoteTitle());
+        putIfHasText(metadata, "sourceName", firstNonBlank(fileInfo.getSourceNoteTitle(), fileInfo.getOriginalFilename(), fileInfo.getFileName()));
+        putIfHasText(metadata, "category", fileInfo.getCategory());
+    }
+
+    private void putIfHasText(Map<String, Object> metadata, String key, String value) {
+        if (value != null && !value.trim().isEmpty()) {
+            metadata.put(key, value.trim());
         }
     }
 

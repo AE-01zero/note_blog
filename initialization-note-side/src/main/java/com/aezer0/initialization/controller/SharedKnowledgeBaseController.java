@@ -288,6 +288,13 @@ public class SharedKnowledgeBaseController {
         return Result.success(PageResult.convert(result));
     }
 
+    @GetMapping("/{knowledgeBaseId}/categories")
+    @SaCheckLogin
+    public Result<List<String>> getKnowledgeBaseCategories(@PathVariable Long knowledgeBaseId) {
+        Long userId = StpUtil.getLoginIdAsLong();
+        return Result.success(fileService.getKnowledgeBaseCategories(knowledgeBaseId, userId));
+    }
+
     /**
      * 鑾峰彇涓汉鏂囦欢鍒楄〃
      * 鑾峰彇鐢ㄦ埛涓汉鐭ヨ瘑搴撲腑鐨勬墍鏈夋枃浠讹紝鐢ㄤ簬澶嶅埗鍒板叡浜煡璇嗗簱鏃堕€夋嫨

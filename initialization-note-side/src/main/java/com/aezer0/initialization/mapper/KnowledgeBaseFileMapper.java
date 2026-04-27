@@ -35,9 +35,9 @@ public interface KnowledgeBaseFileMapper extends BaseMapper<KnowledgeBaseFile> {
             "LEFT JOIN t_file_info f ON kf.file_id = f.id " +
             "LEFT JOIN \"t_user\" u ON kf.uploader_id = u.id " +
             "LEFT JOIN (" +
-            "    SELECT file_id, COUNT(*) as chunk_count, MIN(LEFT(text, 220)) as summary " +
-            "    FROM documents WHERE knowledge_base_type = 2 GROUP BY file_id" +
-            ") doc_stats ON doc_stats.file_id = kf.file_id " +
+            "    SELECT file_id, knowledge_base_id, COUNT(*) as chunk_count, MIN(LEFT(text, 220)) as summary " +
+            "    FROM documents WHERE knowledge_base_type = 2 GROUP BY file_id, knowledge_base_id" +
+            ") doc_stats ON doc_stats.file_id = kf.file_id AND doc_stats.knowledge_base_id = kf.knowledge_base_id " +
             "WHERE kf.knowledge_base_id = #{knowledgeBaseId} " +
             "<if test='keyword != null and keyword != \"\"'> " +
             "  AND f.original_filename LIKE CONCAT('%', #{keyword}, '%') " +
@@ -65,9 +65,9 @@ public interface KnowledgeBaseFileMapper extends BaseMapper<KnowledgeBaseFile> {
             "LEFT JOIN t_file_info f ON kf.file_id = f.id " +
             "LEFT JOIN \"t_user\" u ON kf.uploader_id = u.id " +
             "LEFT JOIN (" +
-            "    SELECT file_id, COUNT(*) as chunk_count, MIN(LEFT(text, 220)) as summary " +
-            "    FROM documents WHERE knowledge_base_type = 2 GROUP BY file_id" +
-            ") doc_stats ON doc_stats.file_id = kf.file_id " +
+            "    SELECT file_id, knowledge_base_id, COUNT(*) as chunk_count, MIN(LEFT(text, 220)) as summary " +
+            "    FROM documents WHERE knowledge_base_type = 2 GROUP BY file_id, knowledge_base_id" +
+            ") doc_stats ON doc_stats.file_id = kf.file_id AND doc_stats.knowledge_base_id = kf.knowledge_base_id " +
             "WHERE kf.knowledge_base_id = #{knowledgeBaseId} " +
             "ORDER BY kf.upload_time DESC")
     List<KnowledgeBaseFileVO> selectAllFilesByKnowledgeBaseId(@Param("knowledgeBaseId") Long knowledgeBaseId);
@@ -112,6 +112,14 @@ public interface KnowledgeBaseFileMapper extends BaseMapper<KnowledgeBaseFile> {
             "WHERE f.user_id = #{userId} " +
             "ORDER BY f.create_time DESC")
     List<KnowledgeBaseFileVO> selectPersonalFiles(@Param("userId") Long userId);
+
+    @Select("SELECT DISTINCT f.category " +
+            "FROM t_knowledge_base_file kf " +
+            "INNER JOIN t_file_info f ON kf.file_id = f.id " +
+            "WHERE kf.knowledge_base_id = #{knowledgeBaseId} " +
+            "AND f.category IS NOT NULL AND TRIM(f.category) <> '' " +
+            "ORDER BY f.category")
+    List<String> selectCategoriesByKnowledgeBaseId(@Param("knowledgeBaseId") Long knowledgeBaseId);
 
     /**
      * 检查用户是否有权限操作该文件

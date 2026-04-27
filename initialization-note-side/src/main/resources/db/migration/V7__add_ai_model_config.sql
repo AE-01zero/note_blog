@@ -12,6 +12,6 @@ CREATE TABLE t_ai_model_config (
 );
 
 INSERT INTO t_ai_model_config(model_type, base_url, api_key, model_name, log_requests, log_responses, max_segments_per_batch) VALUES
-    ('chat',      'https://dashscope.aliyuncs.com/compatible-mode/v1', 'sk-xxxxxx', 'qwen-plus', true, true, 10),
-    ('streaming', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'sk-xxxxxx', 'qwen-plus', true, true, 10),
-    ('embedding', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'sk-xxxxxx', 'text-embedding-v3', true, true, 10);
+    ('chat',      'https://dashscope.aliyuncs.com/compatible-mode/v1', 'sk-placeholder', 'qwen-plus', true, true, 10),
+    ('streaming', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'sk-placeholder', 'qwen-plus', true, true, 10),
+    ('embedding', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'sk-placeholder', 'text-embedding-v3', true, true, 10);

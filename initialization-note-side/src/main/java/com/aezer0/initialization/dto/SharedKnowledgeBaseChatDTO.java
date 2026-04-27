@@ -31,4 +31,9 @@ public class SharedKnowledgeBaseChatDTO {
      * 分类过滤（可选，按分类名称限定检索范围）
      */
     private String categoryFilter;
+
+    /**
+     * 可选：回答模式，strict_kb / kb_hybrid_reasoning
+     */
+    private String answerMode;
 } 

@@ -70,6 +70,10 @@ public interface KnowledgeBaseFileService extends IService<KnowledgeBaseFile> {
      */
     List<KnowledgeBaseFileVO> getPersonalFiles(Long userId);
 
+    List<String> getKnowledgeBaseCategories(Long knowledgeBaseId, Long userId);
+
+    int repairMissingVectors(Long knowledgeBaseId, Long userId);
+
     /**
      * 获取文件详情
      * @param knowledgeBaseId 知识库ID

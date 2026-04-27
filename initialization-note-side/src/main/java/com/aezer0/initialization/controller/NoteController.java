@@ -212,7 +212,7 @@ public class NoteController {
         data.put("stage", task.stage);
         data.put("stageLabel", task.stageLabel);
         if ("done".equals(task.status)) {
-            data.put("result", task.result);
+            data.put("applied", true);
         } else if ("error".equals(task.status)) {
             data.put("error", task.error);
         }

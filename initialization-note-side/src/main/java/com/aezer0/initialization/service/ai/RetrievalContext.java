@@ -13,4 +13,8 @@ public class RetrievalContext {
     private RetrievalPlan plan;
     private List<EmbeddingMatch<TextSegment>> matches;
     private String context;
+    private List<String> referenceLines;
+    private KnowledgeAnswerMode answerMode;
+    private String knowledgeBaseScope;
+    private String categoryFilter;
 }

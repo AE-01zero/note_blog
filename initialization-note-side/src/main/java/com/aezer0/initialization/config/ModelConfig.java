@@ -21,7 +21,7 @@ public class ModelConfig {
     @Qualifier("localChatModel")
     public OpenAiChatModel localChatModel() {
         return OpenAiChatModel.builder()
-                .baseUrl("http://127.0.0.1:1234/v1/")
+                .baseUrl("http://192.168.1.37:1234/v1/")
                 .modelName("qwen1.5-7b-chat")
                 .timeout(Duration.ofMinutes(1))
                 .temperature(3.0).logRequests(true).logResponses(true)

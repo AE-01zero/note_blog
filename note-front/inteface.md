@@ -1,6 +1,6 @@
 docker安装
 ···
-docker run --name pgvector -e POSTGRES_PASSWORD=git_upload_db_password -p 5433:5432 -d ankane/pgvector
+docker run --name pgvector -e POSTGRES_PASSWORD=postgres -p 5433:5432 -d ankane/pgvector
 请求头格式 除验证码、登录、注册、都需要请求头
 Authorization Bearer 281785c-6f8c-44bf-bf13-99ca10a75d29
 #### 获取验证码

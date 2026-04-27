@@ -18,4 +18,7 @@ public class ChatRequestDTO {
 
     /** 可选：限定检索的知识库分类 */
     private String categoryFilter;
+
+    /** 可选：回答模式，strict_kb / kb_hybrid_reasoning */
+    private String answerMode;
 } 

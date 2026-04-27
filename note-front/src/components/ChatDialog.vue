@@ -7,7 +7,7 @@
           <h3>AI 智能助手</h3>
         </div>
         <span class="chat-subtitle">基于知识库的智能问答</span>
-        <div class="category-filter" style="margin-top:6px">
+        <div class="category-filter" style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap">
           <el-select
             v-model="categoryFilter"
             placeholder="限定知识库分类(可选)"
@@ -16,6 +16,14 @@
             style="width:200px"
           >
             <el-option v-for="cat in blogCategories" :key="cat.id" :label="cat.name" :value="cat.name" />
+          </el-select>
+          <el-select
+            v-model="answerMode"
+            size="small"
+            style="width:220px"
+          >
+            <el-option label="严格知识库" value="strict_kb" />
+            <el-option label="知识库+混合思考" value="kb_hybrid_reasoning" />
           </el-select>
         </div>
       </div>
@@ -67,7 +75,22 @@
               <div v-if="message.role === 'user'" class="user-message">
                 {{ message.content }}
               </div>
-              <div v-else class="assistant-message" v-html="renderMarkdown(message.content)"></div>
+              <div v-else class="assistant-wrapper">
+                <div v-if="getAiMeta(message.content).routeLabel || getAiMeta(message.content).answerMode" class="assistant-meta">
+                  <span v-if="getAiMeta(message.content).routeLabel" class="meta-chip">{{ getAiMeta(message.content).routeLabel }}</span>
+                  <span v-if="getAiMeta(message.content).answerMode" class="meta-chip answer-chip">{{ getAiMeta(message.content).answerMode }}</span>
+                </div>
+                <div class="assistant-message" v-html="renderMarkdown(message.content)"></div>
+                <div v-if="getAiMeta(message.content).boundaryPolicy" class="assistant-boundary">
+                  {{ getAiMeta(message.content).boundaryPolicy }}
+                </div>
+                <div v-if="getAiMeta(message.content).references.length" class="assistant-sources">
+                  <span class="sources-title">参考来源</span>
+                  <span v-for="(source, sourceIndex) in getAiMeta(message.content).references" :key="sourceIndex" class="source-chip">
+                    {{ source }}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -133,6 +156,7 @@ import { useUserStore } from '@/store'
 import { ElMessage } from 'element-plus'
 import { ChatRound, Close, Position, Delete, User, Avatar } from '@element-plus/icons-vue'
 import { getMyCategories } from '@/api/blog'
+import { parseAiMeta, renderAiMessageHtml } from '@/utils/aiResponseMeta'
 
 const userStore = useUserStore()
 
@@ -144,6 +168,7 @@ const chatContainer = ref(null)
 const memoryId = ref(`session_${Date.now()}`)
 const abortController = ref(null)
 const categoryFilter = ref('')
+const answerMode = ref('strict_kb')
 const blogCategories = ref([])
 
 // 消息处理
@@ -189,7 +214,8 @@ const sendMessage = async () => {
       body: JSON.stringify({
         message: userMessage,
         memoryId: memoryId.value,
-        categoryFilter: categoryFilter.value || undefined
+        categoryFilter: categoryFilter.value || undefined,
+        answerMode: answerMode.value
       }),
       signal: abortController.value.signal
     })
@@ -365,7 +391,7 @@ const formatTime = (timestamp) => {
 }
 
 // Markdown渲染（简单版本）
-const renderMarkdown = (content) => {
+const renderMarkdownLegacy = (content) => {
   if (!content) return ''
   
   // 简单的Markdown处理
@@ -377,6 +403,10 @@ const renderMarkdown = (content) => {
 }
 
 // 生命周期
+const getAiMeta = (content) => parseAiMeta(content)
+
+const renderMarkdown = (content) => renderAiMessageHtml(content)
+
 onMounted(async () => {
   // 加载分类
   try {
@@ -583,6 +613,58 @@ onMounted(async () => {
   border: 1px solid rgba(139, 92, 246, 0.1);
   backdrop-filter: blur(10px);
   border-bottom-left-radius: 4px;
+}
+
+.assistant-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.assistant-meta,
+.assistant-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meta-chip,
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.meta-chip {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
+.answer-chip {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
+.assistant-boundary {
+  font-size: 12px;
+  color: #475569;
+  background: rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.sources-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.source-chip {
+  background: rgba(139, 92, 246, 0.10);
+  color: #5b21b6;
 }
 
 .message-text :deep(code) {

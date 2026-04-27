@@ -526,22 +526,23 @@
                       </div>
                       <div class="message-content">
                         <div class="message-bubble" :class="{ 'user-bubble': message.type === 'user', 'ai-bubble': message.type === 'ai' }">
-                          <div v-if="message.type === 'ai' && !message.isStreaming && extractRetrievalMeta(message.content).routeLabel" class="message-route-meta">
-                            <span class="route-chip">{{ extractRetrievalMeta(message.content).routeLabel }}</span>
-                            <span v-if="extractRetrievalMeta(message.content).routeReason" class="route-reason">
-                              {{ extractRetrievalMeta(message.content).routeReason }}
+                          <div v-if="message.type === 'ai' && !message.isStreaming && (getAiMeta(message.content).routeLabel || getAiMeta(message.content).answerMode)" class="message-route-meta">
+                            <span v-if="getAiMeta(message.content).routeLabel" class="route-chip">{{ getAiMeta(message.content).routeLabel }}</span>
+                            <span v-if="getAiMeta(message.content).answerMode" class="route-chip answer-mode-chip">{{ getAiMeta(message.content).answerMode }}</span>
+                            <span v-if="getAiMeta(message.content).routeReason" class="route-reason">
+                              {{ getAiMeta(message.content).routeReason }}
                             </span>
                           </div>
-                          <div v-if="message.type === 'ai' && !message.isStreaming && extractSummaryLines(message.content).length" class="message-summary-meta">
+                          <div v-if="message.type === 'ai' && !message.isStreaming && getAiMeta(message.content).boundaryPolicy" class="message-summary-meta">
                             <div class="sources-label">检索摘要</div>
-                            <div v-for="(line, metaIndex) in extractSummaryLines(message.content)" :key="metaIndex" class="summary-line">
-                              {{ line }}
+                            <div class="summary-line">
+                              {{ getAiMeta(message.content).boundaryPolicy }}
                             </div>
                           </div>
                           <div class="message-text" v-html="formatMessage(message.content)"></div>
-                          <div v-if="message.type === 'ai' && !message.isStreaming && extractReferenceLines(message.content).length" class="message-sources">
+                          <div v-if="message.type === 'ai' && !message.isStreaming && getAiMeta(message.content).references.length" class="message-sources">
                             <div class="sources-label">参考来源</div>
-                            <div v-for="(source, sourceIndex) in extractReferenceLines(message.content)" :key="sourceIndex" class="source-chip">
+                            <div v-for="(source, sourceIndex) in getAiMeta(message.content).references" :key="sourceIndex" class="source-chip">
                               {{ source }}
                             </div>
                           </div>
@@ -570,7 +571,7 @@
                   </div>
 
                   <div class="chat-input-container">
-                    <div style="margin-bottom:8px">
+                    <div style="margin-bottom:8px; display:flex; gap:8px; flex-wrap:wrap">
                       <el-select
                           v-model="kbChatCategoryFilter"
                           placeholder="限定检索分类（可选）"
@@ -579,6 +580,14 @@
                           style="width:200px"
                       >
                         <el-option v-for="cat in kbCategories" :key="cat.id" :label="cat.name" :value="cat.name" />
+                      </el-select>
+                      <el-select
+                          v-model="kbChatAnswerMode"
+                          size="small"
+                          style="width:220px"
+                      >
+                        <el-option label="严格知识库" value="strict_kb" />
+                        <el-option label="知识库+混合思考" value="kb_hybrid_reasoning" />
                       </el-select>
                     </div>
                     <div class="chat-input-wrapper">
@@ -1041,16 +1050,15 @@ import {
   joinKnowledgeBase as joinKnowledgeBaseApi,
   leaveKnowledgeBase as leaveKnowledgeBaseApi,
   getSharedKnowledgeBaseFiles,
+  getSharedKnowledgeBaseCategories,
   uploadToSharedKnowledgeBase,
   copyFilesToSharedKnowledgeBase,
   deleteSharedKnowledgeBaseFile,
   getPersonalFileList,
-  sharedKnowledgeBaseChatStream,
   getKnowledgeBaseMembers,
   deleteKnowledgeBaseMember,
   updateKnowledgeBaseFileCategory
 } from '@/api'
-import { getMyCategories, createCategory } from '@/api/blog'
 import UploadTaskPanel from '@/components/UploadTaskPanel.vue'
 import {
   MAX_UPLOAD_SIZE_MB,
@@ -1060,6 +1068,7 @@ import {
   markUploadTaskError,
   scheduleUploadTaskCleanup
 } from '@/utils/uploadProgress'
+import { parseAiMeta, renderAiMessageHtml } from '@/utils/aiResponseMeta'
 
 // Store
 const userStore = useUserStore()
@@ -1074,6 +1083,7 @@ const fileSearchKeyword = ref('')
 const kbChatInput = ref('')
 const kbChatMessages = ref([])
 const kbChatCategoryFilter = ref('')
+const kbChatAnswerMode = ref('strict_kb')
 const kbCategories = ref([])
 const isKbChatting = ref(false)
 const kbSessionId = ref('')
@@ -1272,6 +1282,7 @@ const viewKnowledgeBase = async (kb) => {
     sourceTab.value = activeTab.value
     activeTab.value = 'detail'
     await loadKnowledgeBaseFiles()
+    await loadKnowledgeBaseCategories()
   } catch (error) {
     console.error('获取知识库详情失败:', error)
     ElMessage.error('获取知识库详情失败')
@@ -1443,6 +1454,25 @@ const loadKnowledgeBaseFiles = async () => {
   }
 }
 
+const loadKnowledgeBaseCategories = async () => {
+  if (!currentKnowledgeBase.value?.id) {
+    kbCategories.value = []
+    return
+  }
+  try {
+    const response = await getSharedKnowledgeBaseCategories(currentKnowledgeBase.value.id)
+    const categories = response.data?.data || response.data || []
+    kbCategories.value = categories.map(name => ({ id: name, name }))
+    if (kbChatCategoryFilter.value && !categories.includes(kbChatCategoryFilter.value)) {
+      kbChatCategoryFilter.value = ''
+    }
+  } catch (error) {
+    console.error('加载共享知识库分类失败:', error)
+    kbCategories.value = []
+    kbChatCategoryFilter.value = ''
+  }
+}
+
 const searchFiles = () => {
   filePagination.current = 1
   loadKnowledgeBaseFiles()
@@ -1487,14 +1517,8 @@ const ensureCategoryExists = async (categoryName) => {
   if (!normalizedName) return ''
 
   const existingCategory = kbCategories.value.find(cat => cat.name === normalizedName)
-  if (existingCategory) {
-    return normalizedName
-  }
-
-  const response = await createCategory({ name: normalizedName })
-  const newCategory = response.data?.data || response.data
-  if (newCategory?.id && !kbCategories.value.some(cat => cat.id === newCategory.id)) {
-    kbCategories.value.push(newCategory)
+  if (!existingCategory) {
+    kbCategories.value.push({ id: normalizedName, name: normalizedName })
   }
   return normalizedName
 }
@@ -1529,6 +1553,7 @@ const saveFileCategory = async (row) => {
     const categoryName = await ensureCategoryExists(editingCategoryValue.value)
     await updateKnowledgeBaseFileCategory(currentKnowledgeBase.value.id, row.fileId, categoryName || null)
     row.category = categoryName || null
+    await loadKnowledgeBaseCategories()
     ElMessage.success('分类已更新')
   } catch (e) {
     ElMessage.error('更新分类失败')
@@ -1561,6 +1586,7 @@ const handleUploadFiles = async () => {
     ElMessage.success('文件上传成功')
 
     await loadKnowledgeBaseFiles()
+    await loadKnowledgeBaseCategories()
 
   } catch (error) {
     console.error('上传文件失败:', error)
@@ -1597,6 +1623,7 @@ const handleCopyFiles = async () => {
     ElMessage.success(`成功复制 ${result.successCount} 个文件，失败 ${result.failCount} 个文件`)
 
     await loadKnowledgeBaseFiles()
+    await loadKnowledgeBaseCategories()
 
   } catch (error) {
     console.error('复制文件失败:', error)
@@ -1622,6 +1649,7 @@ const deleteFile = async (file) => {
     ElMessage.success('删除文件成功')
 
     await loadKnowledgeBaseFiles()
+    await loadKnowledgeBaseCategories()
 
     if (currentKnowledgeBase.value) {
       currentKnowledgeBase.value.fileCount = Math.max(0, currentKnowledgeBase.value.fileCount - 1)
@@ -1753,8 +1781,9 @@ const sendKbMessage = async () => {
       body: JSON.stringify({
         knowledgeBaseId: currentKnowledgeBase.value.id,
         message: currentMessage,
-        memoryId: kbSessionId.value,
-        categoryFilter: kbChatCategoryFilter.value || undefined
+        memoryId: `shared_kb_${currentKnowledgeBase.value.id}_${kbChatAnswerMode.value}_${kbChatCategoryFilter.value || 'all'}`,
+        categoryFilter: kbChatCategoryFilter.value || undefined,
+        answerMode: kbChatAnswerMode.value
       })
     })
 
@@ -1882,7 +1911,7 @@ const handleMouseUp = () => {
   document.removeEventListener('mouseup', handleMouseUp)
 }
 
-const extractReferenceLines = (content) => {
+const extractReferenceLinesLegacy = (content) => {
   if (!content) return []
   const marker = '参考来源'
   const index = content.lastIndexOf(marker)
@@ -1894,7 +1923,7 @@ const extractReferenceLines = (content) => {
     .filter(Boolean)
 }
 
-const extractRetrievalMeta = (content) => {
+const extractRetrievalMetaLegacy = (content) => {
   if (!content) return { routeLabel: '', routeReason: '' }
   const routeMatch = content.match(/检索策略：(.+)/)
   const reasonMatch = content.match(/策略原因：(.+)/)
@@ -1904,7 +1933,7 @@ const extractRetrievalMeta = (content) => {
   }
 }
 
-const extractSummaryLines = (content) => {
+const extractSummaryLinesLegacy = (content) => {
   if (!content) return []
   const strategyIndex = content.indexOf('检索策略：')
   const contextIndex = content.indexOf('可参考来源：')
@@ -1919,7 +1948,7 @@ const extractSummaryLines = (content) => {
     .slice(0, 3)
 }
 
-const formatMessage = (content) => {
+const formatMessageLegacy = (content) => {
   const displayContent = (() => {
     const referenceMarker = '参考来源'
     const referenceIndex = content?.lastIndexOf(referenceMarker) ?? -1
@@ -1933,6 +1962,10 @@ const formatMessage = (content) => {
       .replace(/`(.*?)`/g, '<code>$1</code>')
       .replace(/\n/g, '<br>')
 }
+
+const getAiMeta = (content) => parseAiMeta(content)
+
+const formatMessage = (content) => renderAiMessageHtml(content)
 
 const formatFileSize = (bytes) => {
   if (bytes === 0) return '0 Bytes'
@@ -2056,11 +2089,6 @@ onMounted(async () => {
 
   aiChatPosition.x = Math.max(20, window.innerWidth - 420)
   aiChatPosition.y = 80
-
-  try {
-    const res = await getMyCategories()
-    kbCategories.value = res.data?.data || res.data || []
-  } catch (e) { /* 分类加载失败不影响主功能 */ }
 })
 
 onUnmounted(() => {
@@ -3070,6 +3098,11 @@ const deleteMember = async (member) => {
   color: #7c3aed;
 }
 
+.answer-mode-chip {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
 .route-reason {
   font-size: 12px;
   color: #64748b;
@@ -3087,6 +3120,28 @@ const deleteMember = async (member) => {
   font-size: 12px;
   font-weight: 600;
   color: #64748b;
+}
+
+.message-summary-meta .sources-label,
+.message-sources .sources-label {
+  position: relative;
+  color: transparent;
+}
+
+.message-summary-meta .sources-label::after,
+.message-sources .sources-label::after {
+  position: absolute;
+  left: 0;
+  top: 0;
+  color: #64748b;
+}
+
+.message-summary-meta .sources-label::after {
+  content: '回答边界';
+}
+
+.message-sources .sources-label::after {
+  content: '参考来源';
 }
 
 .summary-line {

@@ -21,6 +21,8 @@ import com.aezer0.initialization.utils.DocumentToPdfUtils;
 import com.aezer0.initialization.utils.PdfUtils;
 import com.aezer0.initialization.utils.UserUtils;
 import com.aezer0.initialization.vo.KnowledgeBaseFileVO;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FilenameUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,6 +67,9 @@ public class KnowledgeBaseFileServiceImpl extends ServiceImpl<KnowledgeBaseFileM
 
     @Autowired
     private PgVectorConnectionPool connectionPool;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     /**
      * 上传文件到知识库，非PDF格式会自动转换为PDF后处理。
@@ -259,13 +264,18 @@ public class KnowledgeBaseFileServiceImpl extends ServiceImpl<KnowledgeBaseFileM
                 knowledgeBaseFile.setFileId(fileId);
                 knowledgeBaseFile.setUploaderId(userId);
                 knowledgeBaseFile.setSourceType(uploadDTO.getSourceType());
+                knowledgeBaseFile.setUploadTime(LocalDateTime.now());
                 this.save(knowledgeBaseFile);
 
                 // 复制向量数据到共享知识库（这里需要实现向量数据复制逻辑）
                 try {
-                    copyVectorDataToSharedKnowledgeBase(uploadDTO.getKnowledgeBaseId(), fileId, userId);
+                    int copiedVectors = copyVectorDataToSharedKnowledgeBase(uploadDTO.getKnowledgeBaseId(), fileId, userId);
+                    if (copiedVectors <= 0) {
+                        throw new BizException(BizResponseCode.ERROR_1, "文件向量数据不存在或复制失败");
+                    }
                 } catch (Exception e) {
-                    log.warn("复制文件 {} 的向量数据失败: {}", fileInfo.getOriginalFilename(), e.getMessage());
+                    log.error("复制文件 {} 的向量数据失败: {}", fileInfo.getOriginalFilename(), e.getMessage(), e);
+                    throw e;
                 }
 
                 successFiles.add(fileInfo.getOriginalFilename());
@@ -361,6 +371,38 @@ public class KnowledgeBaseFileServiceImpl extends ServiceImpl<KnowledgeBaseFileM
     }
 
     @Override
+    public List<String> getKnowledgeBaseCategories(Long knowledgeBaseId, Long userId) {
+        if (!knowledgeBaseService.hasPermission(knowledgeBaseId, userId)) {
+            throw new BizException(BizResponseCode.ERR_11003, "您不是该知识库的成员");
+        }
+        return this.baseMapper.selectCategoriesByKnowledgeBaseId(knowledgeBaseId);
+    }
+
+    @Override
+    @Transactional
+    public int repairMissingVectors(Long knowledgeBaseId, Long userId) {
+        if (!knowledgeBaseService.hasPermission(knowledgeBaseId, userId)) {
+            throw new BizException(BizResponseCode.ERR_11003, "您不是该知识库的成员");
+        }
+
+        List<KnowledgeBaseFileVO> files = this.baseMapper.selectAllFilesByKnowledgeBaseId(knowledgeBaseId);
+        int repaired = 0;
+        for (KnowledgeBaseFileVO file : files) {
+            if (file == null || file.getFileId() == null || hasSharedVectorData(knowledgeBaseId, file.getFileId())) {
+                continue;
+            }
+            Long ownerId = file.getUploaderId() != null ? file.getUploaderId() : userId;
+            int copied = copyVectorDataToSharedKnowledgeBase(knowledgeBaseId, file.getFileId(), ownerId);
+            repaired += copied;
+        }
+        if (repaired > 0) {
+            knowledgeBaseService.refreshStatistics(knowledgeBaseId);
+        }
+        log.info("共享知识库 {} 补齐缺失向量 {} 条", knowledgeBaseId, repaired);
+        return repaired;
+    }
+
+    @Override
     public KnowledgeBaseFileVO getFileDetail(Long knowledgeBaseId, Long fileId, Long userId) {
         // 验证权限
         if (!knowledgeBaseService.hasPermission(knowledgeBaseId, userId)) {
@@ -409,15 +451,20 @@ public class KnowledgeBaseFileServiceImpl extends ServiceImpl<KnowledgeBaseFileM
      * @param fileId 文件ID
      * @param userId 用户ID
      */
-    private void copyVectorDataToSharedKnowledgeBase(Long knowledgeBaseId, Long fileId, Long userId) {
+    private int copyVectorDataToSharedKnowledgeBase(Long knowledgeBaseId, Long fileId, Long userId) {
         try {
+            if (hasSharedVectorData(knowledgeBaseId, fileId)) {
+                log.debug("File {} already has vector data in shared knowledge base {}", fileId, knowledgeBaseId);
+                return 0;
+            }
             List<VectorData> vectorDataList = getPersonalVectorDataByFileId(fileId, userId);
             if (vectorDataList.isEmpty()) {
-                log.info("No personal vector data found for file {}, skip copy to shared knowledge base {}", fileId, knowledgeBaseId);
-                return;
+                log.warn("No personal vector data found for file {}, skip copy to shared knowledge base {}", fileId, knowledgeBaseId);
+                return 0;
             }
             int copied = copyVectorDataToSharedKB(knowledgeBaseId, vectorDataList, fileId);
             log.info("Copied {} vector records for file {} to shared knowledge base {}", copied, fileId, knowledgeBaseId);
+            return copied;
         } catch (Exception e) {
             log.error("Failed to copy vector data for file {} to shared knowledge base {}: {}", fileId, knowledgeBaseId, e.getMessage(), e);
             throw new RuntimeException("Failed to copy vector data: " + e.getMessage(), e);
@@ -432,8 +479,8 @@ public class KnowledgeBaseFileServiceImpl extends ServiceImpl<KnowledgeBaseFileM
         
         String sql = """
             SELECT embedding_id, text, metadata, embedding
-            FROM documents 
-            WHERE file_id = ? AND user_id = ? AND (knowledge_base_type = 1 OR knowledge_base_type IS NULL)
+            FROM documents
+            WHERE file_id = ? AND knowledge_base_id = ? AND knowledge_base_type = 1
             """;
         
         try (Connection connection = connectionPool.getConnection();
@@ -463,6 +510,21 @@ public class KnowledgeBaseFileServiceImpl extends ServiceImpl<KnowledgeBaseFileM
         return vectorDataList;
     }
     
+    private boolean hasSharedVectorData(Long knowledgeBaseId, Long fileId) {
+        String sql = "SELECT COUNT(1) > 0 FROM documents WHERE knowledge_base_id = ? AND knowledge_base_type = 2 AND file_id = ?";
+        try (Connection connection = connectionPool.getConnection();
+             PreparedStatement stmt = connection.prepareStatement(sql)) {
+            stmt.setLong(1, knowledgeBaseId);
+            stmt.setLong(2, fileId);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() && rs.getBoolean(1);
+            }
+        } catch (SQLException e) {
+            log.error("查询共享知识库 {} 文件 {} 向量数据失败: {}", knowledgeBaseId, fileId, e.getMessage(), e);
+            throw new RuntimeException("查询共享知识库向量数据失败", e);
+        }
+    }
+
     /**
      * 将向量数据复制到共享知识库
      */
@@ -511,91 +573,44 @@ public class KnowledgeBaseFileServiceImpl extends ServiceImpl<KnowledgeBaseFileM
      */
     private String updateMetadataForSharedKB(String originalMetadata, Long knowledgeBaseId) {
         try {
-            // 解析原始元数据
             Map<String, Object> metadataMap = parseJsonMetadata(originalMetadata);
-            
-            // 添加共享知识库相关信息
             metadataMap.put("knowledgeBaseId", knowledgeBaseId);
             metadataMap.put("knowledgeBaseType", 2);
             metadataMap.put("copyTime", System.currentTimeMillis());
             metadataMap.put("source", "personalKnowledgeBase");
-            
-            // 转换回JSON字符串
+            metadataMap.put("sourceType", "shared");
             return toJsonString(metadataMap);
-            
         } catch (Exception e) {
             log.warn("更新元数据失败，使用原始元数据: {}", e.getMessage());
             return originalMetadata;
         }
     }
-    
+
     /**
      * 解析JSON元数据
      */
     private Map<String, Object> parseJsonMetadata(String jsonMetadata) {
-        Map<String, Object> metadataMap = new HashMap<>();
-        
         if (jsonMetadata == null || jsonMetadata.trim().isEmpty()) {
-            return metadataMap;
+            return new HashMap<>();
         }
-        
         try {
-            // 简单的JSON解析，这里可以根据实际需求使用更复杂的JSON库
-            if (jsonMetadata.startsWith("{") && jsonMetadata.endsWith("}")) {
-                // 移除首尾的大括号
-                String content = jsonMetadata.substring(1, jsonMetadata.length() - 1);
-                
-                // 简单解析键值对
-                String[] pairs = content.split(",");
-                for (String pair : pairs) {
-                    String[] keyValue = pair.split(":");
-                    if (keyValue.length == 2) {
-                        String key = keyValue[0].trim().replaceAll("\"", "");
-                        String value = keyValue[1].trim().replaceAll("\"", "");
-                        metadataMap.put(key, value);
-                    }
-                }
-            }
+            return objectMapper.readValue(jsonMetadata, new TypeReference<Map<String, Object>>() {});
         } catch (Exception e) {
             log.warn("解析JSON元数据失败: {}", e.getMessage());
+            return new HashMap<>();
         }
-        
-        return metadataMap;
     }
-    
+
     /**
      * 将Map转换为JSON字符串
      */
     private String toJsonString(Map<String, Object> map) {
-        if (map == null || map.isEmpty()) {
-            return "{}";
+        try {
+            return objectMapper.writeValueAsString(map == null ? Map.of() : map);
+        } catch (Exception e) {
+            log.warn("转换JSON失败: {}", e.getMessage());
+            throw new RuntimeException("转换JSON失败", e);
         }
-        
-        StringBuilder json = new StringBuilder("{");
-        boolean first = true;
-        
-        for (Map.Entry<String, Object> entry : map.entrySet()) {
-            if (!first) {
-                json.append(",");
-            }
-            json.append("\"").append(entry.getKey()).append("\":");
-            
-            Object value = entry.getValue();
-            if (value instanceof String) {
-                json.append("\"").append(value).append("\"");
-            } else if (value instanceof Number) {
-                json.append(value);
-            } else if (value instanceof Boolean) {
-                json.append(value);
-            } else {
-                json.append("\"").append(value.toString()).append("\"");
-            }
-            
-            first = false;
-        }
-        
-        json.append("}");
-        return json.toString();
     }
     
 

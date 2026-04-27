@@ -1,5 +1,6 @@
 package com.aezer0.initialization.service;
 
+import com.aezer0.initialization.domain.Note;
 import dev.langchain4j.data.message.SystemMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.openai.OpenAiChatModel;
@@ -62,6 +63,9 @@ public class NoteOptimizeTaskService {
     @Qualifier("taskExecutor")
     private Executor taskExecutor;
 
+    @Autowired
+    private NoteService noteService;
+
     public String submitTask(Long noteId, Long userId, String content) {
         String taskId = UUID.randomUUID().toString();
         taskMap.put(taskId, new TaskResult("pending"));
@@ -86,10 +90,11 @@ public class NoteOptimizeTaskService {
         updateStage(task, "outline", "正在整理全文结构", 5);
         try {
             String optimized = optimizeContent(content, noteId, userId, task);
+            saveOptimizedContent(noteId, userId, optimized);
             task.result = optimized;
             task.status = "done";
-            updateStage(task, "done", "优化完成", 100);
-            log.info("笔记 {} 异步优化完成，任务ID: {}", noteId, taskId);
+            updateStage(task, "done", "优化完成，已写回笔记", 100);
+            log.info("笔记 {} 异步优化完成并写回，任务ID: {}", noteId, taskId);
         } catch (Exception e) {
             task.status = "error";
             task.error = e.getMessage();
@@ -135,31 +140,47 @@ public class NoteOptimizeTaskService {
     private String buildOutline(String content, Long noteId, Long userId, TaskResult task) {
         updateStage(task, "outline", "正在提取章节大纲", 5);
         String prompt = "请基于以下 Markdown 笔记提取一个简洁的大纲和格式整理原则。" +
-                "要求：\n1. 只输出章节结构、主题顺序、标题层级建议、列表/代码块整理原则\n2. 不改写原文内容\n3. 控制在 12 条以内\n4. 直接输出可供后续整理使用的要点\n\n原文内容：\n" + abbreviateForOutline(content);
-        return callModel(prompt, "你是一个 Markdown 笔记整理助手。请先提炼结构，不要扩写内容。");
+                "要求：\n1. 只输出章节结构、主题顺序、标题层级建议、列表/代码块整理原则\n2. 不改写原文内容\n3. 保持原文主要语言不变，中文内容继续用中文，英文内容继续用英文\n4. 控制在 12 条以内\n5. 直接输出可供后续整理使用的要点\n\n原文内容：\n" + abbreviateForOutline(content);
+        return callModel(prompt, "你是一个 Markdown 笔记整理助手。请先提炼结构，不要扩写内容，不要把中文标题或正文翻译成英文。");
     }
 
     private String optimizeChunk(String chunk, String outline, Long noteId, Long userId, int index) {
         String userPrompt = "请根据给定的大纲与整理原则，优化下面这段 Markdown 笔记的格式和结构，使其更清晰、规范、易读。" +
-                "要求：\n1. 保持事实和原意不变，只做格式与结构优化\n2. 与大纲保持一致\n3. 保留代码块、列表、引用等 Markdown 语义\n4. 不要添加解释\n\n全文大纲与整理原则：\n" + outline +
+                "要求：\n1. 保持事实和原意不变，只做格式与结构优化\n2. 与大纲保持一致\n3. 保留代码块、列表、引用等 Markdown 语义\n4. 保持原文主要语言不变：中文内容继续用中文，英文内容继续用英文，不要把中文标题改成英文标题\n5. 不要添加解释\n\n全文大纲与整理原则：\n" + outline +
                 "\n\n当前片段：\n" + chunk;
-        return callModel(userPrompt, "你是一个 Markdown 笔记格式优化助手。只优化格式，不改变信息含义。");
+        return callModel(userPrompt, "你是一个 Markdown 笔记格式优化助手。只优化格式，不改变信息含义，不翻译原文语言。");
     }
 
     private String finalizeOptimizedMarkdown(String originalContent, String outline, String mergedContent, Long noteId, Long userId) {
         String userPrompt = "请对以下已经分段优化后的 Markdown 全文做最后一次统一整理。" +
-                "要求：\n1. 保持内容不变，只统一标题层级、段落边界、列表样式、代码块包裹和前后衔接\n2. 删除重复标题或重复空行\n3. 不添加解释，直接返回最终 Markdown\n\n参考大纲：\n" + outline +
+                "要求：\n1. 保持内容不变，只统一标题层级、段落边界、列表样式、代码块包裹和前后衔接\n2. 删除重复标题或重复空行\n3. 保持原文主要语言不变，不要把中文内容改写成英文\n4. 不添加解释，直接返回最终 Markdown\n\n参考大纲：\n" + outline +
                 "\n\n优化后全文：\n" + mergedContent;
-        return callModel(userPrompt, "你是一个 Markdown 收口整理助手。请统一全文风格，但不要增删核心内容。");
+        return callModel(userPrompt, "你是一个 Markdown 收口整理助手。请统一全文风格，但不要增删核心内容，不翻译原文语言。");
+    }
+
+    private void saveOptimizedContent(Long noteId, Long userId, String optimizedContent) {
+        if (!StringUtils.hasText(optimizedContent)) {
+            throw new IllegalStateException("优化结果为空，无法写回笔记");
+        }
+        Note note = noteService.getById(noteId);
+        if (note == null || !note.getUserId().equals(userId)) {
+            throw new IllegalStateException("笔记不存在或无权限");
+        }
+        note.setContentMd(optimizedContent);
+        note.setWordCount(optimizedContent.replaceAll("\\s+", "").length());
+        note.setUpdateTime(LocalDateTime.now());
+        if (!noteService.updateById(note)) {
+            throw new IllegalStateException("优化结果写回失败");
+        }
     }
 
     private String callModel(String userPrompt, String systemPrompt) {
-        return openAiChatModel.chat(
+        return stripOuterMarkdownFence(openAiChatModel.chat(
                 List.of(
-                        SystemMessage.from(systemPrompt),
+                        SystemMessage.from(systemPrompt + "\n输出只能是 Markdown 正文，不要用 ```markdown 或 ``` 包裹整篇内容；保持输入内容的主要语言不变，中文不翻译成英文，英文不翻译成中文。"),
                         UserMessage.from(userPrompt)
                 )
-        ).aiMessage().text();
+        ).aiMessage().text());
     }
 
     public static List<String> splitIntoChunks(String content, int chunkSize, int maxChunkCount) {
@@ -337,6 +358,19 @@ public class NoteOptimizeTaskService {
         }
         chunks.add(current.toString().trim());
         current.setLength(0);
+    }
+
+    private static String stripOuterMarkdownFence(String text) {
+        if (!StringUtils.hasText(text)) {
+            return text;
+        }
+        String normalized = text.trim();
+        Matcher matcher = Pattern.compile("(?s)^```(?:markdown|md)?\\s*\\R(.*)\\R```\\s*$", Pattern.CASE_INSENSITIVE)
+                .matcher(normalized);
+        if (matcher.matches()) {
+            return matcher.group(1).trim();
+        }
+        return text;
     }
 
     private static String abbreviateForOutline(String content) {

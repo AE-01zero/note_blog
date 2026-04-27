@@ -179,7 +179,6 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements No
         // 更新笔记信息
         BeanUtils.copyProperties(updateDTO, note);
         note.setWordCount(calculateWordCount(updateDTO.getContentMd()));
-        note.setCreateTime(LocalDateTime.now());
         note.setUpdateTime(LocalDateTime.now());
         this.saveOrUpdate(note);
 

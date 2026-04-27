@@ -1,6 +1,8 @@
 package com.aezer0.initialization.service.ai;
 
 import com.aezer0.initialization.config.ai.PgVectorConnectionPool;
+import com.aezer0.initialization.domain.FileUpInfo;
+import com.aezer0.initialization.service.FileInfoService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.data.document.Document;
@@ -38,6 +40,9 @@ public class SharedKnowledgeBaseVectorService {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private FileInfoService fileInfoService;
+
     private EmbeddingModel embeddingModel() {
         return applicationContext.getBean(EmbeddingModel.class);
     }
@@ -65,6 +70,7 @@ public class SharedKnowledgeBaseVectorService {
                             metadata.put("originalMetadata", doc.metadata().toString());
                         }
                     }
+                    mergeFileMetadata(metadata, fileId);
 
                     List<Float> vectorList = embedding.vectorAsList();
                     String vectorString = "[" + vectorList.stream()
@@ -130,15 +136,19 @@ public class SharedKnowledgeBaseVectorService {
 
         String sql = hasCategory
                 ? """
-                SELECT d.embedding_id, d.text, d.metadata, d.embedding <=> CAST(? AS vector) as distance
-                FROM documents d LEFT JOIN t_file_info f ON d.file_id = f.id
+                SELECT d.embedding_id, d.text, COALESCE(jsonb_set(d.metadata, '{sourceName}', to_jsonb(COALESCE(f.source_note_title, f.original_filename, f.file_name)), true), d.metadata) AS metadata,
+                       d.embedding <=> CAST(? AS vector) as distance
+                FROM documents d INNER JOIN t_knowledge_base_file kf ON kf.knowledge_base_id = d.knowledge_base_id AND kf.file_id = d.file_id
+                INNER JOIN t_file_info f ON d.file_id = f.id
                 WHERE d.knowledge_base_id = ? AND d.knowledge_base_type = 2 AND f.category = ?
                 ORDER BY distance LIMIT ?
                 """
                 : """
-                SELECT embedding_id, text, metadata, embedding <=> CAST(? AS vector) as distance
-                FROM documents
-                WHERE knowledge_base_id = ? AND knowledge_base_type = 2
+                SELECT d.embedding_id, d.text, COALESCE(jsonb_set(d.metadata, '{sourceName}', to_jsonb(COALESCE(f.source_note_title, f.original_filename, f.file_name)), true), d.metadata) AS metadata,
+                       d.embedding <=> CAST(? AS vector) as distance
+                FROM documents d INNER JOIN t_knowledge_base_file kf ON kf.knowledge_base_id = d.knowledge_base_id AND kf.file_id = d.file_id
+                LEFT JOIN t_file_info f ON d.file_id = f.id
+                WHERE d.knowledge_base_id = ? AND d.knowledge_base_type = 2
                 ORDER BY distance LIMIT ?
                 """;
 
@@ -179,8 +189,8 @@ public class SharedKnowledgeBaseVectorService {
         List<EmbeddingMatch<TextSegment>> results = new ArrayList<>();
         boolean hasCategory = categoryFilter != null && !categoryFilter.trim().isEmpty();
         String sql = hasCategory
-                ? "SELECT d.embedding_id, d.text, d.metadata FROM documents d LEFT JOIN t_file_info f ON d.file_id = f.id WHERE d.knowledge_base_id = ? AND d.knowledge_base_type = 2 AND f.category = ? AND d.text ILIKE ? LIMIT ?"
-                : "SELECT embedding_id, text, metadata FROM documents WHERE knowledge_base_id = ? AND knowledge_base_type = 2 AND text ILIKE ? LIMIT ?";
+                ? "SELECT d.embedding_id, d.text, COALESCE(jsonb_set(d.metadata, '{sourceName}', to_jsonb(COALESCE(f.source_note_title, f.original_filename, f.file_name)), true), d.metadata) AS metadata FROM documents d INNER JOIN t_knowledge_base_file kf ON kf.knowledge_base_id = d.knowledge_base_id AND kf.file_id = d.file_id INNER JOIN t_file_info f ON d.file_id = f.id WHERE d.knowledge_base_id = ? AND d.knowledge_base_type = 2 AND f.category = ? AND d.text ILIKE ? LIMIT ?"
+                : "SELECT d.embedding_id, d.text, COALESCE(jsonb_set(d.metadata, '{sourceName}', to_jsonb(COALESCE(f.source_note_title, f.original_filename, f.file_name)), true), d.metadata) AS metadata FROM documents d INNER JOIN t_knowledge_base_file kf ON kf.knowledge_base_id = d.knowledge_base_id AND kf.file_id = d.file_id LEFT JOIN t_file_info f ON d.file_id = f.id WHERE d.knowledge_base_id = ? AND d.knowledge_base_type = 2 AND d.text ILIKE ? LIMIT ?";
 
         try (Connection connection = connectionPool.getConnection();
              PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -380,26 +390,31 @@ public class SharedKnowledgeBaseVectorService {
 
     private String toJsonString(Map<String, Object> map) {
         try {
-            StringBuilder json = new StringBuilder("{");
-            boolean first = true;
-            for (Map.Entry<String, Object> entry : map.entrySet()) {
-                if (!first) {
-                    json.append(",");
-                }
-                json.append("\"").append(entry.getKey()).append("\":");
-                Object value = entry.getValue();
-                if (value instanceof String) {
-                    json.append("\"").append(value).append("\"");
-                } else {
-                    json.append(value.toString());
-                }
-                first = false;
-            }
-            json.append("}");
-            return json.toString();
+            return objectMapper.writeValueAsString(map == null ? Map.of() : map);
         } catch (Exception e) {
-            log.warn("转换JSON失败，使用简单格式: {}", e.getMessage());
-            throw new RuntimeException();
+            log.warn("转换共享知识库 metadata JSON失败: {}", e.getMessage());
+            throw new RuntimeException("转换共享知识库 metadata JSON失败", e);
+        }
+    }
+
+    private void mergeFileMetadata(Map<String, Object> metadata, Long fileId) {
+        if (fileId == null) {
+            return;
+        }
+        FileUpInfo fileInfo = fileInfoService.getById(fileId);
+        if (fileInfo == null) {
+            return;
+        }
+        putIfHasText(metadata, "fileName", fileInfo.getFileName());
+        putIfHasText(metadata, "originalFilename", fileInfo.getOriginalFilename());
+        putIfHasText(metadata, "sourceNoteTitle", fileInfo.getSourceNoteTitle());
+        putIfHasText(metadata, "sourceName", firstNonBlank(fileInfo.getSourceNoteTitle(), fileInfo.getOriginalFilename(), fileInfo.getFileName()));
+        putIfHasText(metadata, "category", fileInfo.getCategory());
+    }
+
+    private void putIfHasText(Map<String, Object> metadata, String key, String value) {
+        if (value != null && !value.trim().isEmpty()) {
+            metadata.put(key, value.trim());
         }
     }
 

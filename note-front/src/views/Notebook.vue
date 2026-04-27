@@ -1427,11 +1427,14 @@ const startOptimizePolling = (taskId, noteId) => {
       if (data.status === 'done') {
         optimizeProgress.value = 100
         if (currentNote.value && currentNote.value.id === noteId) {
-          currentNote.value.contentMd = data.result
-          await saveNote()
+          const response = await getNote(noteId)
+          const noteData = response.data?.data || response.data
+          currentNote.value = { ...noteData }
+          notebookStore.setCurrentNote(noteData)
+          await loadNotes()
           ElMessage.success('AI格式优化完成')
         } else {
-          ElMessage.warning('AI优化完成，但当前笔记已切换，结果未写入')
+          ElMessage.warning('AI优化完成，但当前笔记已切换，请重新打开笔记查看最新内容')
         }
       } else if (data.status === 'error') {
         ElMessage.error('AI优化失败: ' + (data.error || '未知错误'))

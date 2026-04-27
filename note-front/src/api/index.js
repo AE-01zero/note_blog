@@ -446,6 +446,13 @@ export const getSharedKnowledgeBaseFiles = (knowledgeBaseId, params) => {
   })
 }
 
+export const getSharedKnowledgeBaseCategories = (knowledgeBaseId) => {
+  return request({
+    url: `/shared-knowledge-base/${knowledgeBaseId}/categories`,
+    method: 'get'
+  })
+}
+
 export const getPersonalFileList = () => {
   return request({
     url: '/shared-knowledge-base/personal-files',
