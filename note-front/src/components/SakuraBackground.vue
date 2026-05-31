@@ -20,33 +20,30 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
 
 const getPetalCount = () => {
   const width = window.innerWidth
-  const height = window.innerHeight
-  const isTallViewport = height >= 900
 
-  if (width < 640) return isTallViewport ? 18 : 16
-  if (width < 1024) return isTallViewport ? 30 : 26
-  return isTallViewport ? 44 : 38
+  if (width < 640) return 12
+  if (width < 1024) return 18
+  return 24
 }
 
 const createPetal = (index, total) => {
   const lane = (index / total) * 100
-  const laneOffset = Math.random() * 10 - 5
-  const size = 14 + Math.random() * 24
+  const laneOffset = Math.random() * 8 - 4
+  const size = 14 + Math.random() * 18
   const height = size * (0.72 + Math.random() * 0.24)
-  const opacity = 0.36 + Math.random() * 0.34
-  const tint = 0.62 + Math.random() * 0.2
-  const scale = 0.74 + Math.random() * 0.68
-  const duration = 10 + Math.random() * 8
+  const opacity = 0.32 + Math.random() * 0.42
+  const tint = 0.72 + Math.random() * 0.18
+  const scale = 0.78 + Math.random() * 0.64
 
   return {
     id: `${index}-${Math.round(Math.random() * 100000)}`,
     shellStyle: {
       left: `${clamp(lane + laneOffset, -6, 104)}vw`,
-      '--fall-duration': `${duration}s`,
-      '--fall-delay': `${-Math.random() * duration * 1.6}s`,
-      '--drift-start': `${Math.random() * 96 - 48}px`,
-      '--drift-mid': `${Math.random() * 220 - 110}px`,
-      '--drift-end': `${Math.random() * 340 - 170}px`,
+      '--fall-duration': `${12 + Math.random() * 10}s`,
+      '--fall-delay': `${-Math.random() * 24}s`,
+      '--drift-start': `${Math.random() * 64 - 32}px`,
+      '--drift-mid': `${Math.random() * 140 - 70}px`,
+      '--drift-end': `${Math.random() * 220 - 110}px`,
       '--petal-opacity': `${opacity}`
     },
     shapeStyle: {
@@ -94,7 +91,6 @@ onUnmounted(() => {
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  filter: saturate(1.12);
 }
 
 .sakura-scene::before {
@@ -102,22 +98,13 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 16% 12%, rgba(255, 234, 241, 0.24), transparent 16%),
-    radial-gradient(circle at 82% 18%, rgba(222, 233, 248, 0.2), transparent 18%);
-}
-
-.sakura-scene::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 28% 26%, rgba(255, 223, 235, 0.18), transparent 20%),
-    radial-gradient(circle at 72% 32%, rgba(241, 230, 214, 0.14), transparent 18%);
+    radial-gradient(circle at 18% 12%, rgba(255, 234, 241, 0.28), transparent 16%),
+    radial-gradient(circle at 82% 18%, rgba(255, 214, 230, 0.18), transparent 18%);
 }
 
 .sakura-petal {
   position: fixed;
-  top: -18vh;
+  top: -16vh;
   opacity: var(--petal-opacity, 0.56);
   will-change: transform;
   animation: sakura-fall var(--fall-duration) linear infinite;
@@ -129,14 +116,14 @@ onUnmounted(() => {
   position: relative;
   border-radius: 90% 14% 78% 18%;
   background:
-    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0) 36%),
+    radial-gradient(circle at 28% 24%, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0) 36%),
     linear-gradient(
       155deg,
-      rgba(255, 250, 252, calc(var(--petal-tint) * 0.94)),
-      rgba(249, 217, 229, var(--petal-tint)) 56%,
-      rgba(222, 168, 193, calc(var(--petal-tint) * 0.9))
+      rgba(255, 249, 252, calc(var(--petal-tint) * 0.94)),
+      rgba(255, 210, 228, var(--petal-tint)) 56%,
+      rgba(235, 144, 177, calc(var(--petal-tint) * 0.94))
     );
-  box-shadow: 0 8px 18px rgba(214, 171, 190, 0.22), 0 0 18px rgba(255, 225, 236, 0.18);
+  box-shadow: 0 8px 18px rgba(231, 155, 186, 0.18);
   filter: blur(var(--blur-radius));
   transform-origin: 50% 82%;
   transform: rotate(var(--spin-angle)) scale(var(--petal-scale));

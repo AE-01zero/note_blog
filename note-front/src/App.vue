@@ -33,7 +33,6 @@ const isBlogPage = computed(() => route.path.startsWith('/blog'))
 #app.blog-mode {
   overflow: auto;
   height: auto;
-  min-height: 100vh;
   max-height: none;
   background:
     radial-gradient(circle at 12% 8%, rgba(255, 196, 215, 0.26), transparent 22%),

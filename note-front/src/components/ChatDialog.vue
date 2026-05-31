@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="chat-dialog">
     <div class="chat-header">
       <div class="header-left">
@@ -7,7 +7,7 @@
           <h3>AI 智能助手</h3>
         </div>
         <span class="chat-subtitle">基于知识库的智能问答</span>
-        <div class="category-filter" style="margin-top:6px; display:flex; gap:8px; flex-wrap:wrap">
+        <div class="category-filter" style="margin-top:6px; display: flex; align-items: center; gap: 10px;">
           <el-select
             v-model="categoryFilter"
             placeholder="限定知识库分类(可选)"
@@ -17,14 +17,17 @@
           >
             <el-option v-for="cat in blogCategories" :key="cat.id" :label="cat.name" :value="cat.name" />
           </el-select>
-          <el-select
-            v-model="answerMode"
-            size="small"
-            style="width:220px"
-          >
-            <el-option label="严格知识库" value="strict_kb" />
-            <el-option label="知识库+混合思考" value="kb_hybrid_reasoning" />
-          </el-select>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span style="font-size: 12px; color: #6c7086; white-space: nowrap;">{{ chatMode === 'strict' ? '严格' : '宽松' }}</span>
+            <el-switch
+              v-model="isStrictMode"
+              size="small"
+              active-text="严格"
+              inactive-text="宽松"
+              inline-prompt
+              style="--el-switch-on-color: #e6a23c; --el-switch-off-color: #67c23a;"
+            />
+          </div>
         </div>
       </div>
       <div class="header-actions">
@@ -71,38 +74,104 @@
                 {{ formatTime(message.timestamp) }}
               </span>
             </div>
-            <div class="message-text">
+            <div
+              v-if="message.role === 'assistant' && ((message.thinkingTrace && message.thinkingTrace.length) || message.thinking)"
+              class="thinking-trace-panel"
+            >
+              <details :open="message.isThinking">
+                <summary>
+                  <span>AI思考过程</span>
+                  <span v-if="message.isThinking" class="thinking-live">生成中</span>
+                </summary>
+                <div v-if="message.thinkingTrace && message.thinkingTrace.length" class="trace-steps">
+                  <div
+                    v-for="(item, ti) in message.thinkingTrace"
+                    :key="ti"
+                    class="trace-step"
+                  >
+                    <span class="trace-title">{{ item.title }}</span>
+                    <span class="trace-content">{{ item.content }}</span>
+                  </div>
+                </div>
+                <div v-if="message.thinking" class="thinking-stream" v-html="renderMarkdown(message.thinking)"></div>
+              </details>
+            </div>
+            <div v-if="message.role === 'user' || message.content" class="message-text">
               <div v-if="message.role === 'user'" class="user-message">
                 {{ message.content }}
               </div>
-              <div v-else class="assistant-wrapper">
-                <div v-if="getAiMeta(message.content).routeLabel || getAiMeta(message.content).answerMode" class="assistant-meta">
-                  <span v-if="getAiMeta(message.content).routeLabel" class="meta-chip">{{ getAiMeta(message.content).routeLabel }}</span>
-                  <span v-if="getAiMeta(message.content).answerMode" class="meta-chip answer-chip">{{ getAiMeta(message.content).answerMode }}</span>
-                </div>
-                <div class="assistant-message" v-html="renderMarkdown(message.content)"></div>
-                <div v-if="getAiMeta(message.content).boundaryPolicy" class="assistant-boundary">
-                  {{ getAiMeta(message.content).boundaryPolicy }}
-                </div>
-                <div v-if="getAiMeta(message.content).references.length" class="assistant-sources">
-                  <span class="sources-title">参考来源</span>
-                  <span v-for="(source, sourceIndex) in getAiMeta(message.content).references" :key="sourceIndex" class="source-chip">
-                    {{ source }}
-                  </span>
-                </div>
+              <div v-else class="assistant-message" v-html="renderMarkdown(message.content)"></div>
+            </div>
+            <!-- 知识库来源引用 -->
+            <div v-if="message.role === 'assistant' && message.sources && message.sources.length > 0 && message.content" class="message-sources-footer">
+              <div class="sources-divider"></div>
+              <div class="sources-row">
+                <el-icon size="14" color="#8b5cf6"><Link /></el-icon>
+                <span class="sources-label">参考来源：</span>
+                <el-tag
+                  v-for="(src, si) in message.sources"
+                  :key="si"
+                  size="small"
+                  effect="plain"
+                  class="source-citation-tag"
+                >
+                  {{ src.fileName }}
+                </el-tag>
               </div>
             </div>
           </div>
         </div>
         
-        <!-- 加载中提示 -->
-        <div v-if="isLoading" class="message assistant loading">
+        <!-- 流式状态提示 -->
+        <div v-if="isLoading && !isThinking && !streamPhase" class="message assistant loading">
           <div class="message-avatar">
-            <el-avatar 
-              :size="36" 
-              :icon="Avatar"
-              :style="{ backgroundColor: '#67c23a' }"
-            />
+            <el-avatar :size="36" :icon="Avatar" :style="{ backgroundColor: '#67c23a' }" />
+          </div>
+          <div class="message-content">
+            <div class="message-header">
+              <span class="message-role">AI助手</span>
+              <span class="message-time">{{ streamPhaseLabel || '正在连接...' }}</span>
+            </div>
+            <div class="message-text">
+              <div class="typing-indicator">
+                <span></span><span></span><span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 知识检索状态 -->
+        <div v-if="knowledgeResult" class="knowledge-status">
+          <el-alert
+            :type="knowledgeResult.hasContext ? 'success' : 'warning'"
+            :closable="false"
+            show-icon
+            class="kb-alert"
+          >
+            <template #title>
+              <div class="kb-result">
+                <span>{{ knowledgeResult.hasContext ? `已检索到 ${knowledgeResult.segmentCount} 条相关知识` : '知识库中未找到相关内容' }}</span>
+                <span v-if="knowledgeResult.sources && knowledgeResult.sources.length > 0" class="kb-source-chips">
+                  <el-tag
+                    v-for="(src, si) in knowledgeResult.sources"
+                    :key="si"
+                    size="small"
+                    type="info"
+                    class="source-tag"
+                  >
+                    {{ src.fileName }}
+                    <span v-if="src.fileType" class="source-type">{{ src.fileType }}</span>
+                  </el-tag>
+                </span>
+              </div>
+            </template>
+          </el-alert>
+        </div>
+
+        <!-- AI思考中 -->
+        <div v-if="isThinking" class="message assistant loading">
+          <div class="message-avatar">
+            <el-avatar :size="36" :icon="Avatar" :style="{ backgroundColor: '#67c23a' }" />
           </div>
           <div class="message-content">
             <div class="message-header">
@@ -110,10 +179,10 @@
               <span class="message-time">正在思考...</span>
             </div>
             <div class="message-text">
-              <div class="typing-indicator">
-                <span></span>
-                <span></span>
-                <span></span>
+              <div class="thinking-box">
+                <span class="thinking-dot">●</span>
+                <span>AI正在分析知识库内容并生成回答</span>
+                <span class="thinking-dot">●</span>
               </div>
             </div>
           </div>
@@ -151,12 +220,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useUserStore } from '@/store'
 import { ElMessage } from 'element-plus'
-import { ChatRound, Close, Position, Delete, User, Avatar } from '@element-plus/icons-vue'
+import { ChatRound, Close, Position, Delete, User, Avatar, Link } from '@element-plus/icons-vue'
 import { getMyCategories } from '@/api/blog'
-import { parseAiMeta, renderAiMessageHtml } from '@/utils/aiResponseMeta'
+import { renderMarkdown } from '@/utils/markdown'
+import { normalizeKnowledgeResult, normalizeSourceCitations } from '@/utils/chatDisplay'
 
 const userStore = useUserStore()
 
@@ -168,15 +238,31 @@ const chatContainer = ref(null)
 const memoryId = ref(`session_${Date.now()}`)
 const abortController = ref(null)
 const categoryFilter = ref('')
-const answerMode = ref('strict_kb')
 const blogCategories = ref([])
+const isStrictMode = ref(false)
+const chatMode = ref('relaxed')
+
+// 流式状态
+const streamPhase = ref('')        // knowledge_retrieval / ai_thinking / done
+const streamPhaseLabel = ref('')
+const knowledgeResult = ref(null)  // knowledge_result event data
+const isThinking = ref(false)      // AI思考中
+const currentSources = ref([])     // 当前消息的知识库来源
+
+watch(isStrictMode, (val) => {
+  chatMode.value = val ? 'strict' : 'relaxed'
+})
 
 // 消息处理
 const addMessage = (role, content) => {
   messages.value.push({
     role,
     content,
-    timestamp: new Date()
+    timestamp: new Date(),
+    thinking: '',
+    thinkingTrace: [],
+    isThinking: false,
+    sources: []
   })
   nextTick(() => {
     scrollToBottom()
@@ -189,21 +275,19 @@ const sendMessage = async () => {
 
   const userMessage = inputMessage.value.trim()
   inputMessage.value = ''
-  
-  // 添加用户消息
+
   addMessage('user', userMessage)
-  
-  // 开始流式响应
+
   isLoading.value = true
-  
-  // 创建AbortController以支持取消请求
+  isThinking.value = false
+  streamPhase.value = ''
+  streamPhaseLabel.value = ''
+  knowledgeResult.value = null
+  currentSources.value = []
+
   abortController.value = new AbortController()
-  
+
   try {
-    console.log('发送消息:', userMessage)
-    console.log('使用Token:', userStore.token)
-    
-    // 使用 fetch 处理 Server-Sent Events
     const response = await fetch('/api/chat/stream', {
       method: 'POST',
       headers: {
@@ -215,13 +299,10 @@ const sendMessage = async () => {
         message: userMessage,
         memoryId: memoryId.value,
         categoryFilter: categoryFilter.value || undefined,
-        answerMode: answerMode.value
+        mode: chatMode.value
       }),
       signal: abortController.value.signal
     })
-
-    console.log('聊天API响应状态:', response.status)
-    console.log('响应头:', response.headers.get('content-type'))
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`)
@@ -229,75 +310,51 @@ const sendMessage = async () => {
 
     const reader = response.body.getReader()
     const decoder = new TextDecoder()
-    
-    // 添加AI消息占位符
+
     const aiMessageIndex = messages.value.length
     addMessage('assistant', '')
-    
+
     let buffer = ''
-    
-    // 添加30秒超时
+
     const timeoutId = setTimeout(() => {
-      console.log('流式响应超时，自动结束')
       isLoading.value = false
-    }, 30000)
+      isThinking.value = false
+    }, 120000)
 
     while (true) {
       const { done, value } = await reader.read()
-      
-      if (done) {
-        console.log('流式响应自然结束')
-        clearTimeout(timeoutId)
-        break
-      }
-      
+      if (done) { clearTimeout(timeoutId); break }
+
       buffer += decoder.decode(value, { stream: true })
-      
-      // 处理SSE数据
       const lines = buffer.split('\n')
-      buffer = lines.pop() || '' // 保留最后一个不完整的行
-      
+      buffer = lines.pop() || ''
+
       for (const line of lines) {
-        if (line.trim() === '') continue // 跳过空行
-        
-        // 处理 'data:' 开头的行（可能有空格也可能没有）
-        if (line.startsWith('data:')) {
-          let data = ''
-          
-          // 检查是 'data: ' 还是 'data:'
-          if (line.startsWith('data: ')) {
-            data = line.slice(6).trim()
-          } else if (line.startsWith('data:')) {
-            data = line.slice(5).trim()
-          }
-          
-          console.log('SSE数据片段:', data) // 调试信息
-          
-          if (data === '[DONE]') {
-            // 流式响应结束
-            console.log('收到结束标记，流式响应结束')
-            clearTimeout(timeoutId)
-            isLoading.value = false
-            return
-          }
-          
-          if (data) {
-            // 累积AI回复内容，还原后端编码的换行符
-            messages.value[aiMessageIndex].content += data.replace(/\\n/g, '\n')
-            console.log('当前累积内容长度:', messages.value[aiMessageIndex].content.length)
-            nextTick(() => {
-              scrollToBottom()
-            })
-          }
+        if (!line.startsWith('data:')) continue
+
+        let data = line.startsWith('data: ') ? line.slice(6).trim() : line.slice(5).trim()
+        if (!data) continue
+
+        if (data === '[DONE]') {
+          clearTimeout(timeoutId)
+          isLoading.value = false
+          isThinking.value = false
+          return
+        }
+
+        try {
+          const event = JSON.parse(data)
+          handleChatEvent(event, aiMessageIndex)
+        } catch (e) {
+          // 兼容旧格式: 纯文本回退
+          messages.value[aiMessageIndex].content += data.replace(/\\n/g, '\n')
         }
       }
     }
-    
-    // 清理超时器
+
     clearTimeout(timeoutId)
   } catch (error) {
     if (error.name === 'AbortError') {
-      console.log('用户取消了请求')
       ElMessage.info('已停止回复')
     } else {
       console.error('发送消息失败:', error)
@@ -305,7 +362,73 @@ const sendMessage = async () => {
     }
   } finally {
     isLoading.value = false
+    isThinking.value = false
     abortController.value = null
+  }
+}
+
+// 处理结构化SSE事件
+function handleChatEvent(event, aiMessageIndex) {
+  switch (event.type) {
+    case 'phase':
+      streamPhase.value = event.phase
+      streamPhaseLabel.value = event.label || ''
+      break
+
+    case 'knowledge_result':
+      knowledgeResult.value = normalizeKnowledgeResult(event)
+      if (knowledgeResult.value.sources && knowledgeResult.value.sources.length > 0) {
+        currentSources.value = knowledgeResult.value.sources
+        messages.value[aiMessageIndex].sources = [...knowledgeResult.value.sources]
+      }
+      break
+
+    case 'thinking_trace':
+      messages.value[aiMessageIndex].thinkingTrace = event.items || []
+      break
+
+    case 'thinking_start':
+      isThinking.value = true
+      messages.value[aiMessageIndex].isThinking = true
+      break
+
+    case 'thinking_chunk':
+      isThinking.value = true
+      messages.value[aiMessageIndex].isThinking = true
+      messages.value[aiMessageIndex].thinking += event.content || ''
+      nextTick(() => scrollToBottom())
+      break
+
+    case 'thinking_done':
+      messages.value[aiMessageIndex].isThinking = false
+      break
+
+    case 'ai_chunk':
+      // 收到第一个有效内容时立即隐藏思考状态，开始逐字展示
+      if (isThinking.value && event.content?.trim()) {
+        isThinking.value = false
+      }
+      messages.value[aiMessageIndex].isThinking = false
+      messages.value[aiMessageIndex].content += event.content || ''
+      nextTick(() => scrollToBottom())
+      break
+
+    case 'ai_error':
+      messages.value[aiMessageIndex].content += '\n\n*[' + (event.message || 'AI响应异常') + ']*'
+      break
+
+    case 'done':
+      streamPhase.value = 'done'
+      streamPhaseLabel.value = ''
+      isThinking.value = false
+      messages.value[aiMessageIndex].isThinking = false
+      // 将知识库来源附加到已完成的消息上，持久化展示
+      if (currentSources.value.length > 0) {
+        messages.value[aiMessageIndex].sources = normalizeSourceCitations(currentSources.value)
+      }
+      knowledgeResult.value = null
+      currentSources.value = []
+      break
   }
 }
 
@@ -389,24 +512,6 @@ const scrollToBottom = () => {
 const formatTime = (timestamp) => {
   return new Date(timestamp).toLocaleTimeString()
 }
-
-// Markdown渲染（简单版本）
-const renderMarkdownLegacy = (content) => {
-  if (!content) return ''
-  
-  // 简单的Markdown处理
-  return content
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/`(.*?)`/g, '<code>$1</code>')
-    .replace(/\n/g, '<br>')
-}
-
-// 生命周期
-const getAiMeta = (content) => parseAiMeta(content)
-
-const renderMarkdown = (content) => renderAiMessageHtml(content)
-
 onMounted(async () => {
   // 加载分类
   try {
@@ -615,58 +720,6 @@ onMounted(async () => {
   border-bottom-left-radius: 4px;
 }
 
-.assistant-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.assistant-meta,
-.assistant-sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.meta-chip,
-.source-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.meta-chip {
-  background: rgba(59, 130, 246, 0.12);
-  color: #1d4ed8;
-}
-
-.answer-chip {
-  background: rgba(16, 185, 129, 0.12);
-  color: #047857;
-}
-
-.assistant-boundary {
-  font-size: 12px;
-  color: #475569;
-  background: rgba(148, 163, 184, 0.12);
-  border-radius: 12px;
-  padding: 10px 12px;
-}
-
-.sources-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
-}
-
-.source-chip {
-  background: rgba(139, 92, 246, 0.10);
-  color: #5b21b6;
-}
-
 .message-text :deep(code) {
   background-color: rgba(0, 0, 0, 0.1);
   padding: 2px 6px;
@@ -708,6 +761,293 @@ onMounted(async () => {
 
 .message-text :deep(em) {
   font-style: italic;
+}
+
+/* 增强Markdown样式 */
+.message-text :deep(h1) { font-size: 1.5em; font-weight: 700; margin: 12px 0 8px; color: #1e293b; }
+.message-text :deep(h2) { font-size: 1.3em; font-weight: 700; margin: 10px 0 6px; color: #1e293b; }
+.message-text :deep(h3) { font-size: 1.15em; font-weight: 600; margin: 8px 0 4px; color: #334155; }
+.message-text :deep(h4) { font-size: 1.05em; font-weight: 600; margin: 6px 0 4px; color: #475569; }
+
+.message-text :deep(pre) {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 14px 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 10px 0;
+  font-family: 'Fira Code', 'Courier New', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-text :deep(code) {
+  background: rgba(139, 92, 246, 0.1);
+  color: #7c3aed;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Fira Code', 'Courier New', Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.message-text :deep(pre code) {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+.message-text :deep(blockquote) {
+  border-left: 4px solid #8b5cf6;
+  padding: 8px 14px;
+  margin: 8px 0;
+  background: rgba(139, 92, 246, 0.05);
+  border-radius: 0 6px 6px 0;
+  color: #475569;
+  font-style: italic;
+}
+
+.message-text :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 10px 0;
+  font-size: 13px;
+}
+
+.message-text :deep(th) {
+  background: rgba(139, 92, 246, 0.1);
+  color: #1e293b;
+  font-weight: 700;
+  padding: 8px 12px;
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  text-align: left;
+}
+
+.message-text :deep(td) {
+  padding: 6px 12px;
+  border: 1px solid rgba(139, 92, 246, 0.1);
+  color: #334155;
+}
+
+.message-text :deep(tr:nth-child(even) td) {
+  background: rgba(139, 92, 246, 0.02);
+}
+
+.message-text :deep(hr) {
+  border: none;
+  border-top: 2px solid rgba(139, 92, 246, 0.15);
+  margin: 14px 0;
+}
+
+.message-text :deep(ul), .message-text :deep(ol) {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.message-text :deep(li) {
+  margin: 3px 0;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.message-text :deep(a) {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.message-text :deep(a:hover) {
+  color: #8b5cf6;
+}
+
+.user-message :deep(h1), .user-message :deep(h2), .user-message :deep(h3), .user-message :deep(h4) {
+  color: rgba(255,255,255,0.95);
+}
+
+.user-message :deep(blockquote) {
+  border-left-color: rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.85);
+}
+
+.user-message :deep(table), .user-message :deep(th), .user-message :deep(td) {
+  border-color: rgba(255,255,255,0.2);
+  color: rgba(255,255,255,0.9);
+}
+
+.user-message :deep(th) {
+  background: rgba(255,255,255,0.15);
+}
+
+.user-message :deep(tr:nth-child(even) td) {
+  background: rgba(255,255,255,0.05);
+}
+
+.user-message :deep(a) {
+  color: rgba(255,255,255,0.9);
+}
+
+/* 知识检索状态 */
+.knowledge-status {
+  margin: 0 0 8px 0;
+}
+
+.kb-alert {
+  border-radius: 10px;
+}
+
+.kb-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.kb-source-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.source-tag {
+  font-size: 11px;
+}
+
+.source-tag .source-type {
+  opacity: 0.7;
+  margin-left: 2px;
+}
+
+/* 消息来源引用 */
+.message-sources-footer {
+  margin-top: 6px;
+  padding: 0 4px;
+}
+
+.sources-divider {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(139, 92, 246, 0.2), transparent);
+  margin-bottom: 6px;
+}
+
+.sources-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.sources-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.source-citation-tag {
+  font-size: 11px;
+  cursor: default;
+}
+
+/* AI思考过程 */
+.thinking-trace-panel {
+  margin-bottom: 8px;
+  border: 1px solid rgba(139, 92, 246, 0.16);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.thinking-trace-panel details {
+  width: 100%;
+}
+
+.thinking-trace-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+  padding: 9px 12px;
+  color: #5b21b6;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(139, 92, 246, 0.06);
+  list-style: none;
+}
+
+.thinking-trace-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.thinking-live {
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.trace-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px 0;
+}
+
+.trace-step {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.trace-title {
+  color: #7c3aed;
+  font-weight: 600;
+}
+
+.trace-content {
+  color: #475569;
+  word-break: break-word;
+}
+
+.thinking-stream {
+  padding: 10px 12px 12px;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+/* AI思考动画 */
+.thinking-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.1);
+  font-size: 14px;
+  color: #64748b;
+}
+
+.thinking-dot {
+  color: #8b5cf6;
+  animation: dotPulse 1.2s ease-in-out infinite;
+  font-size: 10px;
+}
+
+.thinking-dot:last-child {
+  animation-delay: 0.4s;
+}
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.3); }
 }
 
 .typing-indicator {

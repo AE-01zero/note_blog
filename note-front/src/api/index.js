@@ -83,7 +83,7 @@ export const changePassword = (data) => {
 }
 
 // 文件上传
-export const uploadFile = (file, options = {}) => {
+export const uploadFile = (file) => {
   const formData = new FormData()
   formData.append('file', file)
   return request({
@@ -93,8 +93,24 @@ export const uploadFile = (file, options = {}) => {
     headers: {
       'Content-Type': 'multipart/form-data'
     },
-    timeout: 300000,
-    ...options
+    timeout: 300000
+  })
+}
+
+// 多文件上传
+export const uploadMultipleFiles = (files) => {
+  const formData = new FormData()
+  files.forEach(file => {
+    formData.append('files', file)
+  })
+  return request({
+    url: '/common/file/upload/multiple',
+    method: 'post',
+    data: formData,
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    },
+    timeout: 600000
   })
 }
 
@@ -200,12 +216,13 @@ export const getTags = () => {
 export const addNoteToKnowledgeBase = (noteId) => {
   return request({
     url: `/notes/${noteId}/add-to-knowledge-base`,
-    method: 'post'
+    method: 'post',
+    timeout: 120000  // 2分钟超时，向量化后台异步执行
   })
 }
 
 // 导入MD文件为笔记
-export const importNoteFromMarkdown = (notebookId, file, options = {}) => {
+export const importNoteFromMarkdown = (notebookId, file) => {
   const formData = new FormData()
   formData.append('notebookId', notebookId)
   formData.append('file', file)
@@ -213,9 +230,7 @@ export const importNoteFromMarkdown = (notebookId, file, options = {}) => {
     url: '/notes/import-md',
     method: 'post',
     data: formData,
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 300000,
-    ...options
+    headers: { 'Content-Type': 'multipart/form-data' }
   })
 }
 
@@ -263,10 +278,9 @@ export const deleteOptimizeTask = (taskId) => {
 }
 
 // 文档管理接口
-export const uploadDocument = (file, category, options = {}) => {
+export const uploadDocument = (file) => {
   const formData = new FormData()
   formData.append('file', file)
-  if (category) formData.append('category', category)
   return request({
     url: '/documents/upload',
     method: 'post',
@@ -274,8 +288,7 @@ export const uploadDocument = (file, category, options = {}) => {
     headers: {
       'Content-Type': 'multipart/form-data'
     },
-    timeout: 300000,
-    ...options
+    timeout: 300000
   })
 }
 
@@ -399,7 +412,7 @@ export const deleteKnowledgeBaseMember = (deleteUserId, knowledgeBaseId) => {
 }
 
 // 共享知识库文件管理接口
-export const uploadToSharedKnowledgeBase = (knowledgeBaseId, file, category, options = {}) => {
+export const uploadToSharedKnowledgeBase = (knowledgeBaseId, file, category) => {
   const formData = new FormData()
   formData.append('file', file)
   if (category) formData.append('category', category)
@@ -410,8 +423,7 @@ export const uploadToSharedKnowledgeBase = (knowledgeBaseId, file, category, opt
     headers: {
       'Content-Type': 'multipart/form-data'
     },
-    timeout: 300000,
-    ...options
+    timeout: 300000
   })
 }
 
@@ -443,13 +455,6 @@ export const getSharedKnowledgeBaseFiles = (knowledgeBaseId, params) => {
     url: `/shared-knowledge-base/${knowledgeBaseId}/files`,
     method: 'get',
     params
-  })
-}
-
-export const getSharedKnowledgeBaseCategories = (knowledgeBaseId) => {
-  return request({
-    url: `/shared-knowledge-base/${knowledgeBaseId}/categories`,
-    method: 'get'
   })
 }
 

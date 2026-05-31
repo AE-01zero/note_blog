@@ -285,23 +285,10 @@
                           </el-icon>
                         </template>
                       </el-table-column>
-                      <el-table-column label="文件名" min-width="320" show-overflow-tooltip>
+                      <el-table-column label="文件名" min-width="200" show-overflow-tooltip>
                         <template #default="{ row }">
                           <div class="file-name-cell">
-                            <div class="file-name-row">
-                              <div class="file-name">{{ row.originalFilename }}</div>
-                              <div class="file-entry-meta">
-                                <span v-if="row.chunkCount > 0" class="entry-chip">
-                                  {{ row.chunkCount }} 个片段
-                                </span>
-                                <span v-if="row.category" class="entry-chip category-chip">
-                                  {{ row.category }}
-                                </span>
-                              </div>
-                            </div>
-                            <div v-if="buildFileEntrySummary(row)" class="file-summary">
-                              {{ buildFileEntrySummary(row) }}
-                            </div>
+                            <div class="file-name">{{ row.originalFilename }}</div>
                           </div>
                         </template>
                       </el-table-column>
@@ -457,9 +444,22 @@
                       <div class="kb-name">{{ currentKnowledgeBase.name }}</div>
                       <div class="chat-count">{{ kbChatMessages.length }} 条对话</div>
                     </div>
-                    <div class="status-indicator" :class="{ 'online': !isKbChatting, 'thinking': isKbChatting }">
-                      <span class="indicator-dot"></span>
-                      <span class="indicator-text">{{ isKbChatting ? 'AI思考中...' : 'AI在线' }}</span>
+                    <div class="status-actions" style="display: flex; align-items: center; gap: 8px;">
+                      <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="font-size: 11px; color: #6c7086; white-space: nowrap;">{{ kbChatMode === 'strict' ? '严格' : '宽松' }}</span>
+                        <el-switch
+                          v-model="kbIsStrictMode"
+                          size="small"
+                          active-text="严格"
+                          inactive-text="宽松"
+                          inline-prompt
+                          style="--el-switch-on-color: #e6a23c; --el-switch-off-color: #67c23a;"
+                        />
+                      </div>
+                      <div class="status-indicator" :class="{ 'online': !isKbChatting, 'thinking': isKbChatting }">
+                        <span class="indicator-dot"></span>
+                        <span class="indicator-text">{{ isKbChatting ? 'AI思考中...' : 'AI在线' }}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -525,27 +525,39 @@
                         </el-avatar>
                       </div>
                       <div class="message-content">
-                        <div class="message-bubble" :class="{ 'user-bubble': message.type === 'user', 'ai-bubble': message.type === 'ai' }">
-                          <div v-if="message.type === 'ai' && !message.isStreaming && (getAiMeta(message.content).routeLabel || getAiMeta(message.content).answerMode)" class="message-route-meta">
-                            <span v-if="getAiMeta(message.content).routeLabel" class="route-chip">{{ getAiMeta(message.content).routeLabel }}</span>
-                            <span v-if="getAiMeta(message.content).answerMode" class="route-chip answer-mode-chip">{{ getAiMeta(message.content).answerMode }}</span>
-                            <span v-if="getAiMeta(message.content).routeReason" class="route-reason">
-                              {{ getAiMeta(message.content).routeReason }}
-                            </span>
-                          </div>
-                          <div v-if="message.type === 'ai' && !message.isStreaming && getAiMeta(message.content).boundaryPolicy" class="message-summary-meta">
-                            <div class="sources-label">检索摘要</div>
-                            <div class="summary-line">
-                              {{ getAiMeta(message.content).boundaryPolicy }}
+                        <div
+                            v-if="message.type === 'ai' && ((message.thinkingTrace && message.thinkingTrace.length) || message.thinking)"
+                            class="kb-thinking-panel"
+                        >
+                          <details :open="message.isThinking">
+                            <summary>
+                              <span>AI思考过程</span>
+                              <span v-if="message.isThinking" class="kb-thinking-live">生成中</span>
+                            </summary>
+                            <div v-if="message.thinkingTrace && message.thinkingTrace.length" class="kb-trace-steps">
+                              <div v-for="(item, ti) in message.thinkingTrace" :key="ti" class="kb-trace-step">
+                                <span class="kb-trace-title">{{ item.title }}</span>
+                                <span class="kb-trace-content">{{ item.content }}</span>
+                              </div>
                             </div>
-                          </div>
+                            <div v-if="message.thinking" class="kb-thinking-stream" v-html="formatMessage(message.thinking)"></div>
+                          </details>
+                        </div>
+                        <div v-if="message.type === 'user' || message.content" class="message-bubble" :class="{ 'user-bubble': message.type === 'user', 'ai-bubble': message.type === 'ai' }">
                           <div class="message-text" v-html="formatMessage(message.content)"></div>
-                          <div v-if="message.type === 'ai' && !message.isStreaming && getAiMeta(message.content).references.length" class="message-sources">
-                            <div class="sources-label">参考来源</div>
-                            <div v-for="(source, sourceIndex) in getAiMeta(message.content).references" :key="sourceIndex" class="source-chip">
-                              {{ source }}
-                            </div>
-                          </div>
+                        </div>
+                        <div v-if="message.type === 'ai' && message.sources && message.sources.length" class="kb-message-sources">
+                          <span class="kb-source-label">参考来源：</span>
+                          <el-tag
+                              v-for="(src, si) in message.sources"
+                              :key="si"
+                              size="small"
+                              effect="plain"
+                              class="kb-source-tag"
+                          >
+                            {{ src.fileName || '未知来源' }}
+                            <span v-if="src.category"> · {{ src.category }}</span>
+                          </el-tag>
                         </div>
                         <div class="message-time">{{ formatTime(message.time) }}</div>
                       </div>
@@ -571,7 +583,7 @@
                   </div>
 
                   <div class="chat-input-container">
-                    <div style="margin-bottom:8px; display:flex; gap:8px; flex-wrap:wrap">
+                    <div style="margin-bottom:8px">
                       <el-select
                           v-model="kbChatCategoryFilter"
                           placeholder="限定检索分类（可选）"
@@ -580,14 +592,6 @@
                           style="width:200px"
                       >
                         <el-option v-for="cat in kbCategories" :key="cat.id" :label="cat.name" :value="cat.name" />
-                      </el-select>
-                      <el-select
-                          v-model="kbChatAnswerMode"
-                          size="small"
-                          style="width:220px"
-                      >
-                        <el-option label="严格知识库" value="strict_kb" />
-                        <el-option label="知识库+混合思考" value="kb_hybrid_reasoning" />
                       </el-select>
                     </div>
                     <div class="chat-input-wrapper">
@@ -771,7 +775,7 @@
           :on-change="handleFileSelect"
           :before-remove="handleRemoveFile"
           multiple
-          accept=".pdf,.doc,.docx,.txt,.md"
+          accept=".pdf,.txt,.md,.docx"
       >
         <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
         <div class="el-upload__text">
@@ -779,7 +783,7 @@
         </div>
         <template #tip>
           <div class="el-upload__tip">
-            支持 pdf、doc、docx、txt、md 格式，单文件最大 100MB
+            支持 pdf、txt、md、docx 格式，单文件最大 50MB
           </div>
         </template>
       </el-upload>
@@ -897,24 +901,7 @@
         center
         @closed="resetPreviewDialog"
     >
-      <div class="preview-container" :class="{ 'text-preview-shell': previewDialog.fileType === 'txt' || previewDialog.fileType === 'md' }">
-        <div
-            v-if="previewDialog.fileType === 'txt' || previewDialog.fileType === 'md'"
-            class="preview-meta-bar"
-        >
-          <div class="preview-meta-main">
-            <div class="preview-meta-title">{{ previewDialog.metadata?.fileName }}</div>
-            <div class="preview-meta-subtitle">
-              <span>{{ previewDialog.metadata?.typeLabel }}</span>
-              <span>{{ previewDialog.metadata?.fileSize }}</span>
-              <span>{{ previewDialog.metadata?.updateTime }}</span>
-            </div>
-          </div>
-          <div class="preview-meta-tags">
-            <el-tag size="small" round>{{ previewDialog.metadata?.sourceLabel }}</el-tag>
-            <el-tag size="small" round type="warning">{{ previewDialog.metadata?.category }}</el-tag>
-          </div>
-        </div>
+      <div class="preview-container">
         <!-- PDF 预览 -->
         <iframe
             v-if="previewDialog.fileType === 'pdf'"
@@ -925,12 +912,12 @@
         <pre
             v-else-if="previewDialog.fileType === 'txt'"
             class="text-preview"
-        >{{ previewDialog.textContent || '暂无文本内容' }}</pre>
+        >{{ previewDialog.textContent }}</pre>
         <!-- Markdown 预览 -->
         <div
             v-else-if="previewDialog.fileType === 'md'"
             class="markdown-preview"
-            v-html="previewDialog.markdownContent || '<p>暂无 Markdown 内容</p>'"
+            v-html="previewDialog.markdownContent"
         />
         <!-- 不支持 -->
         <div v-else class="preview-placeholder">
@@ -1025,8 +1012,6 @@
         <el-button type="primary" @click="loadMembers">刷新</el-button>
       </template>
     </el-dialog>
-
-    <UploadTaskPanel :tasks="uploadTasks" title="知识库上传进度" />
   </div>
 </template>
 
@@ -1039,6 +1024,8 @@ import {
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/store'
+import { renderMarkdown } from '@/utils/markdown'
+import { normalizeSourceCitations } from '@/utils/chatDisplay'
 import {
   getKnowledgeBaseSquare,
   getMyCreatedKnowledgeBase,
@@ -1050,25 +1037,16 @@ import {
   joinKnowledgeBase as joinKnowledgeBaseApi,
   leaveKnowledgeBase as leaveKnowledgeBaseApi,
   getSharedKnowledgeBaseFiles,
-  getSharedKnowledgeBaseCategories,
   uploadToSharedKnowledgeBase,
   copyFilesToSharedKnowledgeBase,
   deleteSharedKnowledgeBaseFile,
   getPersonalFileList,
+  sharedKnowledgeBaseChatStream,
   getKnowledgeBaseMembers,
   deleteKnowledgeBaseMember,
   updateKnowledgeBaseFileCategory
 } from '@/api'
-import UploadTaskPanel from '@/components/UploadTaskPanel.vue'
-import {
-  MAX_UPLOAD_SIZE_MB,
-  createUploadTask,
-  updateUploadTaskProgress,
-  markUploadTaskSuccess,
-  markUploadTaskError,
-  scheduleUploadTaskCleanup
-} from '@/utils/uploadProgress'
-import { parseAiMeta, renderAiMessageHtml } from '@/utils/aiResponseMeta'
+import { getMyCategories } from '@/api/blog'
 
 // Store
 const userStore = useUserStore()
@@ -1083,10 +1061,14 @@ const fileSearchKeyword = ref('')
 const kbChatInput = ref('')
 const kbChatMessages = ref([])
 const kbChatCategoryFilter = ref('')
-const kbChatAnswerMode = ref('strict_kb')
 const kbCategories = ref([])
 const isKbChatting = ref(false)
 const kbSessionId = ref('')
+const kbIsStrictMode = ref(false)
+const kbChatMode = ref('relaxed')
+watch(kbIsStrictMode, (val) => {
+  kbChatMode.value = val ? 'strict' : 'relaxed'
+})
 const chatMessages = ref()
 const showAiChat = ref(false) // 控制AI助手显示/隐藏
 const quickQuestions = ref([
@@ -1139,9 +1121,7 @@ const filePagination = reactive({
 // 对话框状态
 const showCreateDialog = ref(false)
 const showJoinDialog = ref(false)
-const SUPPORTED_UPLOAD_EXTENSIONS = ['pdf', 'doc', 'docx', 'txt', 'md']
-const SUPPORTED_UPLOAD_LABEL = 'pdf、doc、docx、txt、md'
-
+const showUploadDialog = ref(false)
 const showCopyDialog = ref(false)
 const isEditing = ref(false)
 const createMode = ref('empty')
@@ -1159,8 +1139,7 @@ const previewDialog = reactive({
   fileUrl: '',
   fileType: '',
   textContent: '',
-  markdownContent: '',
-  metadata: null
+  markdownContent: ''
 })
 
 // 表单数据
@@ -1179,7 +1158,6 @@ const joinForm = reactive({
 const joinKnowledgeBaseData = ref({})
 const uploadFileList = ref([])
 const uploadCategory = ref('')
-const uploadTasks = ref([])
 const editingCategoryFileId = ref(null)
 const editingCategoryValue = ref('')
 
@@ -1282,7 +1260,6 @@ const viewKnowledgeBase = async (kb) => {
     sourceTab.value = activeTab.value
     activeTab.value = 'detail'
     await loadKnowledgeBaseFiles()
-    await loadKnowledgeBaseCategories()
   } catch (error) {
     console.error('获取知识库详情失败:', error)
     ElMessage.error('获取知识库详情失败')
@@ -1454,25 +1431,6 @@ const loadKnowledgeBaseFiles = async () => {
   }
 }
 
-const loadKnowledgeBaseCategories = async () => {
-  if (!currentKnowledgeBase.value?.id) {
-    kbCategories.value = []
-    return
-  }
-  try {
-    const response = await getSharedKnowledgeBaseCategories(currentKnowledgeBase.value.id)
-    const categories = response.data?.data || response.data || []
-    kbCategories.value = categories.map(name => ({ id: name, name }))
-    if (kbChatCategoryFilter.value && !categories.includes(kbChatCategoryFilter.value)) {
-      kbChatCategoryFilter.value = ''
-    }
-  } catch (error) {
-    console.error('加载共享知识库分类失败:', error)
-    kbCategories.value = []
-    kbChatCategoryFilter.value = ''
-  }
-}
-
 const searchFiles = () => {
   filePagination.current = 1
   loadKnowledgeBaseFiles()
@@ -1489,50 +1447,7 @@ const handleFileCurrentChange = (current) => {
   loadKnowledgeBaseFiles()
 }
 
-const pushUploadTask = (file) => {
-  const sourceFile = file?.raw || file
-  const task = createUploadTask(sourceFile, { name: `知识库上传 · ${sourceFile?.name || '未命名文件'}` })
-  uploadTasks.value.unshift(task)
-  if (uploadTasks.value.length > 10) {
-    uploadTasks.value = uploadTasks.value.slice(0, 10)
-  }
-  return task
-}
-
-const finishUploadTask = (task, error) => {
-  if (!task) return
-
-  if (error) {
-    markUploadTaskError(task, error)
-    scheduleUploadTaskCleanup(uploadTasks, task.id, 5000)
-    return
-  }
-
-  markUploadTaskSuccess(task)
-  scheduleUploadTaskCleanup(uploadTasks, task.id)
-}
-
-const ensureCategoryExists = async (categoryName) => {
-  const normalizedName = typeof categoryName === 'string' ? categoryName.trim() : ''
-  if (!normalizedName) return ''
-
-  const existingCategory = kbCategories.value.find(cat => cat.name === normalizedName)
-  if (!existingCategory) {
-    kbCategories.value.push({ id: normalizedName, name: normalizedName })
-  }
-  return normalizedName
-}
-
 const handleFileSelect = (file) => {
-  const extension = (file.name.split('.').pop() || '').toLowerCase()
-  if (!SUPPORTED_UPLOAD_EXTENSIONS.includes(extension)) {
-    ElMessage.error(`只支持 ${SUPPORTED_UPLOAD_LABEL} 格式`)
-    return false
-  }
-  if ((file.size || 0) / 1024 / 1024 > MAX_UPLOAD_SIZE_MB) {
-    ElMessage.error(`文件大小不能超过 ${MAX_UPLOAD_SIZE_MB}MB`)
-    return false
-  }
   uploadFileList.value = [...uploadFileList.value, file]
 }
 
@@ -1550,10 +1465,8 @@ const startEditCategory = (row) => {
 
 const saveFileCategory = async (row) => {
   try {
-    const categoryName = await ensureCategoryExists(editingCategoryValue.value)
-    await updateKnowledgeBaseFileCategory(currentKnowledgeBase.value.id, row.fileId, categoryName || null)
-    row.category = categoryName || null
-    await loadKnowledgeBaseCategories()
+    await updateKnowledgeBaseFileCategory(currentKnowledgeBase.value.id, row.fileId, editingCategoryValue.value || null)
+    row.category = editingCategoryValue.value || null
     ElMessage.success('分类已更新')
   } catch (e) {
     ElMessage.error('更新分类失败')
@@ -1564,19 +1477,9 @@ const saveFileCategory = async (row) => {
 
 const handleUploadFiles = async () => {
   try {
-    const categoryName = await ensureCategoryExists(uploadCategory.value)
-    const uploadPromises = uploadFileList.value.map(async (file) => {
-      const uploadTask = pushUploadTask(file)
-      try {
-        await uploadToSharedKnowledgeBase(currentKnowledgeBase.value.id, file.raw, categoryName || undefined, {
-          onUploadProgress: (progressEvent) => updateUploadTaskProgress(uploadTask, progressEvent)
-        })
-        finishUploadTask(uploadTask)
-      } catch (error) {
-        finishUploadTask(uploadTask, error)
-        throw error
-      }
-    })
+    const uploadPromises = uploadFileList.value.map(file =>
+        uploadToSharedKnowledgeBase(currentKnowledgeBase.value.id, file.raw, uploadCategory.value || undefined)
+    )
 
     await Promise.all(uploadPromises)
 
@@ -1586,7 +1489,6 @@ const handleUploadFiles = async () => {
     ElMessage.success('文件上传成功')
 
     await loadKnowledgeBaseFiles()
-    await loadKnowledgeBaseCategories()
 
   } catch (error) {
     console.error('上传文件失败:', error)
@@ -1623,7 +1525,6 @@ const handleCopyFiles = async () => {
     ElMessage.success(`成功复制 ${result.successCount} 个文件，失败 ${result.failCount} 个文件`)
 
     await loadKnowledgeBaseFiles()
-    await loadKnowledgeBaseCategories()
 
   } catch (error) {
     console.error('复制文件失败:', error)
@@ -1649,7 +1550,6 @@ const deleteFile = async (file) => {
     ElMessage.success('删除文件成功')
 
     await loadKnowledgeBaseFiles()
-    await loadKnowledgeBaseCategories()
 
     if (currentKnowledgeBase.value) {
       currentKnowledgeBase.value.fileCount = Math.max(0, currentKnowledgeBase.value.fileCount - 1)
@@ -1685,17 +1585,7 @@ const resetPreviewDialog = () => {
   previewDialog.textContent = ''
   previewDialog.markdownContent = ''
   previewDialog.title = ''
-  previewDialog.metadata = null
 }
-
-const buildPreviewMetadata = (file) => ({
-  fileName: file.originalFilename || file.fileName || '未命名文件',
-  category: file.category || '未分类',
-  fileSize: formatFileSize(file.fileSize || 0),
-  sourceLabel: file.sourceType === 2 ? '笔记转换' : (file.sourceTypeName || '本地上传'),
-  updateTime: formatTime(file.uploadTime || file.createTime),
-  typeLabel: (file.fileExtension || file.fileType || '').toUpperCase() || '文件'
-})
 
 // 预览文件
 const previewFile = async (file) => {
@@ -1714,7 +1604,6 @@ const previewFile = async (file) => {
   previewDialog.fileType = ''
   previewDialog.textContent = ''
   previewDialog.markdownContent = ''
-  previewDialog.metadata = buildPreviewMetadata(file)
 
   try {
     if (ext === 'pdf') {
@@ -1781,9 +1670,9 @@ const sendKbMessage = async () => {
       body: JSON.stringify({
         knowledgeBaseId: currentKnowledgeBase.value.id,
         message: currentMessage,
-        memoryId: `shared_kb_${currentKnowledgeBase.value.id}_${kbChatAnswerMode.value}_${kbChatCategoryFilter.value || 'all'}`,
+        memoryId: kbSessionId.value,
         categoryFilter: kbChatCategoryFilter.value || undefined,
-        answerMode: kbChatAnswerMode.value
+        mode: kbChatMode.value
       })
     })
 
@@ -1791,12 +1680,14 @@ const sendKbMessage = async () => {
       throw new Error(`HTTP error! status: ${response.status}`)
     }
 
-  const aiMessage = {
+    const aiMessage = {
       type: 'ai',
       content: '',
-      time: new Date().toISOString(),
-      isStreaming: true,
-      routeMeta: null
+      thinking: '',
+      thinkingTrace: [],
+      sources: [],
+      isThinking: false,
+      time: new Date().toISOString()
     }
 
     kbChatMessages.value.push(aiMessage)
@@ -1828,18 +1719,18 @@ const sendKbMessage = async () => {
           }
 
           if (data === '[DONE]') {
-            currentAiMessage.isStreaming = false
             isKbChatting.value = false
             return
           }
 
           if (data) {
-            currentAiMessage.content += data.replace(/\\n/g, '\n')
-            nextTick(() => {
-              if (chatMessages.value) {
-                chatMessages.value.scrollTop = chatMessages.value.scrollHeight
-              }
-            })
+            try {
+              const event = JSON.parse(data)
+              handleKbChatEvent(event, currentAiMessage)
+            } catch (e) {
+              currentAiMessage.content += data.replace(/\\n/g, '\n')
+              scrollKbChatToBottom()
+            }
           }
         }
       }
@@ -1871,6 +1762,49 @@ const sendKbMessage = async () => {
   } finally {
     isKbChatting.value = false
   }
+}
+
+const handleKbChatEvent = (event, currentAiMessage) => {
+  switch (event.type) {
+    case 'knowledge_result':
+      currentAiMessage.sources = normalizeSourceCitations(event.sources)
+      break
+    case 'thinking_trace':
+      currentAiMessage.thinkingTrace = event.items || []
+      break
+    case 'thinking_start':
+      currentAiMessage.isThinking = true
+      break
+    case 'thinking_chunk':
+      currentAiMessage.isThinking = true
+      currentAiMessage.thinking += event.content || ''
+      scrollKbChatToBottom()
+      break
+    case 'thinking_done':
+      currentAiMessage.isThinking = false
+      break
+    case 'ai_chunk':
+      currentAiMessage.isThinking = false
+      currentAiMessage.content += event.content || ''
+      scrollKbChatToBottom()
+      break
+    case 'ai_error':
+      currentAiMessage.isThinking = false
+      currentAiMessage.content += `\n\n*[${event.message || 'AI响应异常'}]*`
+      break
+    case 'done':
+      currentAiMessage.isThinking = false
+      isKbChatting.value = false
+      break
+  }
+}
+
+const scrollKbChatToBottom = () => {
+  nextTick(() => {
+    if (chatMessages.value) {
+      chatMessages.value.scrollTop = chatMessages.value.scrollHeight
+    }
+  })
 }
 
 const clearKbChat = () => {
@@ -1911,61 +1845,9 @@ const handleMouseUp = () => {
   document.removeEventListener('mouseup', handleMouseUp)
 }
 
-const extractReferenceLinesLegacy = (content) => {
-  if (!content) return []
-  const marker = '参考来源'
-  const index = content.lastIndexOf(marker)
-  if (index === -1) return []
-  return content
-    .slice(index + marker.length)
-    .split('\n')
-    .map(line => line.replace(/^[:：\s-]+/, '').trim())
-    .filter(Boolean)
+const formatMessage = (content) => {
+  return renderMarkdown(content)
 }
-
-const extractRetrievalMetaLegacy = (content) => {
-  if (!content) return { routeLabel: '', routeReason: '' }
-  const routeMatch = content.match(/检索策略：(.+)/)
-  const reasonMatch = content.match(/策略原因：(.+)/)
-  return {
-    routeLabel: routeMatch?.[1]?.trim() || '',
-    routeReason: reasonMatch?.[1]?.trim() || ''
-  }
-}
-
-const extractSummaryLinesLegacy = (content) => {
-  if (!content) return []
-  const strategyIndex = content.indexOf('检索策略：')
-  const contextIndex = content.indexOf('可参考来源：')
-  if (strategyIndex === -1 || contextIndex === -1 || contextIndex <= strategyIndex) {
-    return []
-  }
-  return content
-    .slice(strategyIndex, contextIndex)
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => line && !line.startsWith('检索策略：') && !line.startsWith('策略原因：'))
-    .slice(0, 3)
-}
-
-const formatMessageLegacy = (content) => {
-  const displayContent = (() => {
-    const referenceMarker = '参考来源'
-    const referenceIndex = content?.lastIndexOf(referenceMarker) ?? -1
-    const strategyIndex = content?.indexOf('检索策略：') ?? -1
-    const contentWithoutReferences = referenceIndex === -1 ? content : content.slice(0, referenceIndex).trimEnd()
-    return strategyIndex === -1 ? contentWithoutReferences : contentWithoutReferences.slice(contentWithoutReferences.indexOf('\n\n') + 2).trimStart()
-  })()
-  return displayContent
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/`(.*?)`/g, '<code>$1</code>')
-      .replace(/\n/g, '<br>')
-}
-
-const getAiMeta = (content) => parseAiMeta(content)
-
-const formatMessage = (content) => renderAiMessageHtml(content)
 
 const formatFileSize = (bytes) => {
   if (bytes === 0) return '0 Bytes'
@@ -2001,14 +1883,6 @@ const getFileColor = (fileType) => {
   if (t === 'txt') return '#3b82f6'
   if (t === 'md') return '#10b981'
   return '#64748b'
-}
-
-const buildFileEntrySummary = (file) => {
-  const summary = (file?.summary || '').replace(/\s+/g, ' ').trim()
-  if (!summary) {
-    return ''
-  }
-  return summary.length > 120 ? `${summary.slice(0, 120)}...` : summary
 }
 
 watch(activeTab, (newTab) => {
@@ -2089,6 +1963,11 @@ onMounted(async () => {
 
   aiChatPosition.x = Math.max(20, window.innerWidth - 420)
   aiChatPosition.y = 80
+
+  try {
+    const res = await getMyCategories()
+    kbCategories.value = res.data?.data || res.data || []
+  } catch (e) { /* 分类加载失败不影响主功能 */ }
 })
 
 onUnmounted(() => {
@@ -2664,54 +2543,12 @@ const deleteMember = async (member) => {
 .file-name-cell {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-}
-
-.file-name-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
 }
 
 .file-name {
   font-weight: 600;
   color: #1e293b;
-  margin-bottom: 0;
-}
-
-.file-entry-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.entry-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  color: #6366f1;
-  background: rgba(99, 102, 241, 0.1);
-  white-space: nowrap;
-}
-
-.category-chip {
-  color: #0f766e;
-  background: rgba(15, 118, 110, 0.1);
-}
-
-.file-summary {
-  font-size: 12px;
-  line-height: 1.6;
-  color: #64748b;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  margin-bottom: 2px;
 }
 
 .file-original-name {
@@ -3077,92 +2914,8 @@ const deleteMember = async (member) => {
   font-size: 14px;
   line-height: 1.5;
   word-wrap: break-word;
-}
-
-.message-route-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 10px;
-}
-
-.route-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  background: rgba(139, 92, 246, 0.12);
-  color: #7c3aed;
-}
-
-.answer-mode-chip {
-  background: rgba(16, 185, 129, 0.12);
-  color: #047857;
-}
-
-.route-reason {
-  font-size: 12px;
-  color: #64748b;
-}
-
-.message-summary-meta,
-.message-sources {
-  margin-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.sources-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #64748b;
-}
-
-.message-summary-meta .sources-label,
-.message-sources .sources-label {
-  position: relative;
-  color: transparent;
-}
-
-.message-summary-meta .sources-label::after,
-.message-sources .sources-label::after {
-  position: absolute;
-  left: 0;
-  top: 0;
-  color: #64748b;
-}
-
-.message-summary-meta .sources-label::after {
-  content: '回答边界';
-}
-
-.message-sources .sources-label::after {
-  content: '参考来源';
-}
-
-.summary-line {
-  font-size: 12px;
-  line-height: 1.6;
-  color: #475569;
-  background: rgba(148, 163, 184, 0.10);
-  border-radius: 10px;
-  padding: 8px 10px;
-}
-
-.source-chip {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
+  overflow-wrap: break-word;
   max-width: 100%;
-  padding: 6px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  color: #475569;
-  background: rgba(59, 130, 246, 0.10);
 }
 
 .user-bubble {
@@ -3176,6 +2929,205 @@ const deleteMember = async (member) => {
   color: #1e293b;
   border: 1px solid rgba(139, 92, 246, 0.1);
   backdrop-filter: blur(10px);
+}
+
+.message-text :deep(p),
+.kb-thinking-stream :deep(p) {
+  margin: 0 0 8px;
+}
+
+.message-text :deep(p:last-child),
+.kb-thinking-stream :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.message-text :deep(ul),
+.message-text :deep(ol),
+.kb-thinking-stream :deep(ul),
+.kb-thinking-stream :deep(ol) {
+  margin: 6px 0 8px;
+  padding-left: 20px;
+}
+
+.message-text :deep(li),
+.kb-thinking-stream :deep(li) {
+  margin: 3px 0;
+  line-height: 1.6;
+}
+
+.message-text :deep(h1),
+.message-text :deep(h2),
+.message-text :deep(h3),
+.message-text :deep(h4),
+.kb-thinking-stream :deep(h1),
+.kb-thinking-stream :deep(h2),
+.kb-thinking-stream :deep(h3),
+.kb-thinking-stream :deep(h4) {
+  margin: 10px 0 6px;
+  color: #1e293b;
+  line-height: 1.3;
+}
+
+.message-text :deep(h1),
+.kb-thinking-stream :deep(h1) {
+  font-size: 18px;
+}
+
+.message-text :deep(h2),
+.kb-thinking-stream :deep(h2) {
+  font-size: 16px;
+}
+
+.message-text :deep(h3),
+.kb-thinking-stream :deep(h3) {
+  font-size: 15px;
+}
+
+.message-text :deep(h4),
+.kb-thinking-stream :deep(h4) {
+  font-size: 14px;
+}
+
+.message-text :deep(hr),
+.kb-thinking-stream :deep(hr) {
+  border: none;
+  border-top: 1px solid rgba(139, 92, 246, 0.16);
+  margin: 10px 0;
+}
+
+.message-text :deep(code),
+.kb-thinking-stream :deep(code) {
+  background: rgba(139, 92, 246, 0.1);
+  color: #7c3aed;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'Courier New', Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.message-text :deep(pre),
+.kb-thinking-stream :deep(pre) {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #1e293b;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+}
+
+.message-text :deep(pre code),
+.kb-thinking-stream :deep(pre code) {
+  padding: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.message-text :deep(table),
+.kb-thinking-stream :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.message-text :deep(th),
+.message-text :deep(td),
+.kb-thinking-stream :deep(th),
+.kb-thinking-stream :deep(td) {
+  padding: 6px 8px;
+  border: 1px solid rgba(139, 92, 246, 0.14);
+  text-align: left;
+}
+
+.message-text :deep(th),
+.kb-thinking-stream :deep(th) {
+  background: rgba(139, 92, 246, 0.08);
+  font-weight: 700;
+}
+
+.kb-thinking-panel {
+  margin-bottom: 8px;
+  border: 1px solid rgba(139, 92, 246, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  overflow: hidden;
+}
+
+.kb-thinking-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+  color: #5b21b6;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(139, 92, 246, 0.06);
+}
+
+.kb-thinking-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.kb-thinking-live {
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.kb-trace-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px 0;
+}
+
+.kb-trace-step {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.kb-trace-title {
+  color: #7c3aed;
+  font-weight: 600;
+}
+
+.kb-trace-content {
+  color: #475569;
+  word-break: break-word;
+}
+
+.kb-thinking-stream {
+  padding: 9px 10px 10px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.kb-message-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+.kb-source-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.kb-source-tag {
+  font-size: 11px;
 }
 
 .message-time {
@@ -3287,52 +3239,9 @@ const deleteMember = async (member) => {
 .preview-container {
   width: 100%;
   height: 70vh;
-  background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+  background: #fff;
   overflow: auto;
-  border-radius: 16px;
-}
-
-.text-preview-shell {
-  display: flex;
-  flex-direction: column;
-}
-
-.preview-meta-bar {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px 20px;
-  border-bottom: 1px solid rgba(99, 102, 241, 0.12);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(16px);
-}
-
-.preview-meta-main {
-  min-width: 0;
-}
-
-.preview-meta-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1e293b;
-  line-height: 1.4;
-}
-
-.preview-meta-subtitle {
-  margin-top: 6px;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.preview-meta-tags {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: flex-end;
+  border-radius: 8px;
 }
 
 .preview-iframe {
@@ -3341,72 +3250,197 @@ const deleteMember = async (member) => {
   border: none;
 }
 
-.text-preview,
-.markdown-preview {
+.text-preview {
   box-sizing: border-box;
   width: 100%;
-  min-height: calc(70vh - 78px);
+  min-height: 100%;
   margin: 0;
-  padding: 28px 32px;
-  color: #334155;
-  background: rgba(255, 255, 255, 0.96);
-  line-height: 1.9;
-  overflow: auto;
-  max-width: 980px;
-  align-self: center;
+  padding: 16px;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: break-word;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #303133;
+  background: #fff;
 }
 
-.text-preview {
+.markdown-preview {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 100%;
+  padding: 32px;
+  color: #1e293b;
+  background: #fff;
+  line-height: 1.8;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  font-family: 'Inter', -apple-system, sans-serif;
   font-size: 15px;
-  font-family: "JetBrains Mono", "Consolas", "Microsoft YaHei", monospace;
 }
 
 .markdown-preview :deep(h1),
 .markdown-preview :deep(h2),
 .markdown-preview :deep(h3),
-.markdown-preview :deep(h4) {
+.markdown-preview :deep(h4),
+.markdown-preview :deep(h5),
+.markdown-preview :deep(h6) {
   color: #0f172a;
-  line-height: 1.35;
-  margin-top: 1.6em;
-  margin-bottom: 0.7em;
+  font-family: 'Outfit', 'Inter', sans-serif;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-top: 28px;
+  margin-bottom: 16px;
 }
 
-.markdown-preview :deep(p),
-.markdown-preview :deep(li),
+.markdown-preview :deep(h1) {
+  font-size: 2.2em;
+  border-bottom: 2px solid #f1f5f9;
+  padding-bottom: 10px;
+  margin-top: 10px;
+}
+
+.markdown-preview :deep(h2) {
+  font-size: 1.65em;
+  position: relative;
+  padding-left: 14px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 8px;
+}
+
+.markdown-preview :deep(h2)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 12px;
+  width: 4px;
+  background: linear-gradient(to bottom, #8b5cf6, #3b82f6);
+  border-radius: 2px;
+}
+
+.markdown-preview :deep(h3) {
+  font-size: 1.35em;
+}
+
+.markdown-preview :deep(p) {
+  margin-top: 0;
+  margin-bottom: 18px;
+  color: #334155;
+}
+
+.markdown-preview :deep(a) {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px dashed rgba(59, 130, 246, 0.4);
+  transition: all 0.2s ease;
+}
+
+.markdown-preview :deep(a:hover) {
+  color: #2563eb;
+  border-bottom-style: solid;
+}
+
 .markdown-preview :deep(blockquote) {
-  font-size: 15px;
+  margin: 20px 0;
+  padding: 14px 22px;
+  background: rgba(139, 92, 246, 0.035);
+  border-left: 4px solid #8b5cf6;
+  border-radius: 0 12px 12px 0;
+  color: #475569;
+  font-style: italic;
+}
+
+.markdown-preview :deep(blockquote p) {
+  margin: 0;
+}
+
+.markdown-preview :deep(ul),
+.markdown-preview :deep(ol) {
+  padding-left: 24px;
+  margin-bottom: 18px;
+  color: #334155;
+}
+
+.markdown-preview :deep(li) {
+  margin-bottom: 8px;
+}
+
+.markdown-preview :deep(pre) {
+  margin: 24px 0;
+  padding: 16px 20px;
+  background: #1e1e2e;
+  border-radius: 12px;
+  overflow: auto;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.markdown-preview :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: #cdd6f4;
+  border-radius: 0;
+  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.markdown-preview :deep(code) {
+  padding: 3px 6px;
+  background: rgba(139, 92, 246, 0.08);
+  color: #6d28d9;
+  border-radius: 6px;
+  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+  font-size: 0.9em;
 }
 
 .markdown-preview :deep(table) {
   width: 100%;
-  border-collapse: collapse;
-  margin: 16px 0;
-}
-
-.markdown-preview :deep(th),
-.markdown-preview :deep(td) {
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 28px 0;
+  border-radius: 12px;
+  overflow: hidden;
   border: 1px solid #e2e8f0;
-  padding: 10px 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
 }
 
-.markdown-preview :deep(pre) {
-  padding: 12px;
-  overflow: auto;
-  background: #f5f7fa;
-  border-radius: 6px;
+.markdown-preview :deep(th) {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(59, 130, 246, 0.05) 100%);
+  color: #1e293b;
+  font-weight: 600;
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.markdown-preview :deep(code) {
-  padding: 2px 4px;
-  background: #f5f7fa;
-  border-radius: 4px;
+.markdown-preview :deep(td) {
+  padding: 12px 16px;
+  color: #334155;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.markdown-preview :deep(tr:last-child td) {
+  border-bottom: none;
+}
+
+.markdown-preview :deep(tr:nth-child(even)) {
+  background-color: #f8fafc;
+}
+
+.markdown-preview :deep(hr) {
+  height: 1px;
+  border: none;
+  background: linear-gradient(to right, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.25), rgba(139, 92, 246, 0.08));
+  margin: 32px 0;
 }
 
 .markdown-preview :deep(img) {
   max-width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
 .preview-placeholder {

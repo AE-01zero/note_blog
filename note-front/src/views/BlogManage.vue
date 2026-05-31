@@ -1,6 +1,5 @@
 <template>
   <div class="blog-console">
-    <SakuraBackground />
     <div class="console-haze haze-a"></div>
     <div class="console-haze haze-b"></div>
 
@@ -228,7 +227,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getMyBlogPosts, publishBlogPost, unpublishBlogPost, deleteBlogPost, getMyCategories } from '@/api/blog'
 import BlogEditorWorkspace from '@/components/BlogEditorWorkspace.vue'
-import SakuraBackground from '@/components/SakuraBackground.vue'
 
 const route = useRoute()
 const router = useRouter()

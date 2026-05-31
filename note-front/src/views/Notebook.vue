@@ -57,7 +57,7 @@
                     <el-button
                         type="text"
                         size="small"
-                        @click="openCreateNotebookDialog"
+                        @click="showCreateNotebook = true"
                         title="新建笔记本"
                     >
                       <el-icon><Plus /></el-icon>
@@ -116,8 +116,8 @@
                         <div class="notebook-count">{{ notebook.noteCount }} 篇笔记</div>
                         <el-tag v-if="notebook.categoryName" size="small" type="info" style="margin-top:2px">{{ notebook.categoryName }}</el-tag>
                       </div>
-                      <el-dropdown @command="(command) => handleNotebookCommand(command, notebook)" @click.stop>
-                        <el-icon class="notebook-menu" @click.stop><MoreFilled /></el-icon>
+                      <el-dropdown @command="(command) => handleNotebookCommand(command, notebook)">
+                        <el-icon class="notebook-menu"><MoreFilled /></el-icon>
                         <template #dropdown>
                           <el-dropdown-menu>
                             <el-dropdown-item command="edit">编辑</el-dropdown-item>
@@ -266,17 +266,8 @@
                   </el-button>
                   <el-button @click="handleOptimizeFormat" type="warning" size="small" :loading="aiOptimizing">
                     <el-icon><MagicStick /></el-icon>
-                    {{ aiOptimizing ? `${optimizeTaskMeta.stageLabel || 'AI优化中'} ${optimizeProgress}%` : 'AI优化格式' }}
+                    AI优化格式
                   </el-button>
-                  <div
-                    v-if="aiOptimizing"
-                    style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#909399"
-                  >
-                    <span v-if="optimizeTaskMeta.totalChunks > 0">
-                      {{ optimizeTaskMeta.completedChunks }}/{{ optimizeTaskMeta.totalChunks }} 段
-                    </span>
-                    <span>{{ optimizeTaskMeta.stageLabel || '处理中' }}</span>
-                  </div>
                   <el-button v-if="isDefaultAdmin" @click="handleNoteToBlog" type="warning" size="small">
                     发布为博客
                   </el-button>
@@ -361,6 +352,9 @@
         </el-tab-pane>
         <el-tab-pane v-if="isDefaultAdmin" label="⚙️ AI设置" name="aiConfig">
           <AiConfigPanel />
+        </el-tab-pane>
+        <el-tab-pane v-if="isDefaultAdmin" label="🔒 AI安全分析" name="aiSecurity">
+          <AiSecurityPanel />
         </el-tab-pane>
         <el-tab-pane style="display: none" >
         </el-tab-pane>
@@ -451,9 +445,8 @@
     <!-- 创建笔记本对话框 -->
     <el-dialog
         v-model="showCreateNotebook"
-        :title="notebookDialogTitle"
+        title="创建笔记本"
         width="400px"
-        @closed="resetNotebookDialog"
     >
       <el-form :model="notebookForm" :rules="notebookRules" ref="notebookFormRef">
         <el-form-item label="笔记本名称" prop="name">
@@ -468,21 +461,15 @@
           />
         </el-form-item>
         <el-form-item label="分类" prop="categoryId">
-          <el-select v-model="notebookForm.categoryId" placeholder="选择已有分类" clearable filterable style="width:100%">
+          <el-select v-model="notebookForm.categoryId" placeholder="选择或输入新分类名" clearable filterable allow-create style="width:100%">
             <el-option v-for="cat in blogCategories" :key="cat.id" :label="cat.name" :value="cat.id" />
           </el-select>
-          <el-input
-            v-model="notebookNewCategoryName"
-            placeholder="或输入新分类名称，提交时自动创建"
-            clearable
-            style="margin-top:8px"
-          />
-          <div style="font-size:12px;color:#999;margin-top:2px">已有分类从下拉选择，新分类在输入框里填写后会自动写入数据库</div>
+          <div style="font-size:12px;color:#999;margin-top:2px">可直接输入新分类名创建</div>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showCreateNotebook = false">取消</el-button>
-        <el-button type="primary" @click="handleSubmitNotebook">{{ notebookDialogConfirmText }}</el-button>
+        <el-button type="primary" @click="handleCreateNotebook">确定</el-button>
       </template>
     </el-dialog>
 
@@ -493,13 +480,11 @@
         :note-content="blogEditorNoteContent"
         @saved="showBlogEditor = false"
     />
-
-    <UploadTaskPanel :tasks="uploadTasks" title="上传任务" />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   Plus,
@@ -549,15 +534,7 @@ import SharedKnowledgeBase from '@/components/SharedKnowledgeBase.vue'
 import BlogManager from '@/components/BlogManager.vue'
 import BlogEditorDialog from '@/components/BlogEditorDialog.vue'
 import AiConfigPanel from '@/components/AiConfigPanel.vue'
-import UploadTaskPanel from '@/components/UploadTaskPanel.vue'
-import {
-  MAX_UPLOAD_SIZE_MB,
-  createUploadTask,
-  updateUploadTaskProgress,
-  markUploadTaskSuccess,
-  markUploadTaskError,
-  scheduleUploadTaskCleanup
-} from '@/utils/uploadProgress'
+import AiSecurityPanel from '@/components/ai-security/AiSecurityPanel.vue'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -573,7 +550,6 @@ const currentNotebook = ref(null)
 const currentNote = ref(null)
 const searchKeyword = ref('')
 const showCreateNotebook = ref(false)
-const editingNotebookId = ref(null)
 const showTagInput = ref(false)
 const newTag = ref('')
 const sidebarCollapsed = ref(false)
@@ -586,10 +562,7 @@ const showBlogEditor = ref(false)
 const blogEditorNoteTitle = ref('')
 const blogEditorNoteContent = ref('')
 const aiOptimizing = ref(false)
-const optimizeTaskId = ref('')
-const optimizeTimer = ref(null)
 const mdFileInput = ref(null)
-const uploadTasks = ref([])
 
 // 个人信息
 const showProfileDialog = ref(false)
@@ -627,7 +600,6 @@ const passwordRules = {
 }
 
 const blogCategories = ref([])
-const notebookNewCategoryName = ref('')
 
 // 表单数据
 const notebookForm = reactive({
@@ -643,8 +615,6 @@ const notebookRules = {
 }
 
 const notebookFormRef = ref()
-const notebookDialogTitle = computed(() => editingNotebookId.value ? '编辑笔记本' : '创建笔记本')
-const notebookDialogConfirmText = computed(() => editingNotebookId.value ? '保存' : '确定')
 
 // 计算属性
 const totalNoteCount = computed(() => {
@@ -687,8 +657,6 @@ const filteredNotes = computed(() => {
 
 const windowWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1366)
 const isMobile = ref(windowWidth.value <= 768)
-const shouldSingleFloating = computed(() => isMobile.value)
-const desktopDirectExpand = computed(() => !isMobile.value)
 const dockHorizontal = computed(() => !isMobile.value && !sidebarCollapsed.value && !noteListCollapsed.value)
 const notebookContainerClass = computed(() => ({
   'dock-horizontal': dockHorizontal.value,
@@ -702,6 +670,8 @@ const noteListWrapperClass = computed(() => ({
   'is-collapsed': noteListCollapsed.value,
   'is-floating-active': noteListCollapsed.value && noteListFloatingOpen.value
 }))
+const shouldSingleFloating = computed(() => isMobile.value)
+const desktopDirectExpand = computed(() => !isMobile.value)
 const editorHeight = computed(() => (isMobile.value ? '58vh' : '500px'))
 
 const expandSidebarInMobile = () => {
@@ -718,88 +688,10 @@ const expandNoteListInMobile = () => {
   sidebarFloatingOpen.value = false
 }
 
-const resetNotebookForm = () => {
-  notebookForm.name = ''
-  notebookForm.description = ''
-  notebookForm.categoryId = null
-  notebookNewCategoryName.value = ''
-  notebookFormRef.value?.clearValidate?.()
-}
-
-const resetNotebookDialog = () => {
-  editingNotebookId.value = null
-  resetNotebookForm()
-}
-
-const openCreateNotebookDialog = async () => {
-  resetNotebookDialog()
-  showCreateNotebook.value = true
-  await nextTick()
-  notebookFormRef.value?.clearValidate?.()
-}
-
-const openEditNotebookDialog = async (notebook) => {
-  editingNotebookId.value = notebook.id
-  notebookForm.name = notebook.name || ''
-  notebookForm.description = notebook.description || ''
-  notebookForm.categoryId = notebook.categoryId ?? null
-  notebookNewCategoryName.value = ''
-  showCreateNotebook.value = true
-  await nextTick()
-  notebookFormRef.value?.clearValidate?.()
-}
-
-const loadNotebookCategories = async () => {
-  const catRes = await getMyCategories()
-  blogCategories.value = catRes.data?.data || catRes.data || []
-}
-
-const pushUploadTask = (file, name) => {
-  const task = createUploadTask(file, { name })
-  uploadTasks.value.unshift(task)
-  if (uploadTasks.value.length > 8) {
-    uploadTasks.value = uploadTasks.value.slice(0, 8)
-  }
-  return task
-}
-
-const finishUploadTask = (task, error) => {
-  if (!task) return
-
-  if (error) {
-    markUploadTaskError(task, error)
-    scheduleUploadTaskCleanup(uploadTasks, task.id, 5000)
-    return
-  }
-
-  markUploadTaskSuccess(task)
-  scheduleUploadTaskCleanup(uploadTasks, task.id)
-}
-
-const resolveNotebookCategoryId = async (selectedCategoryId, rawCategoryName) => {
-  const categoryName = typeof rawCategoryName === 'string' ? rawCategoryName.trim() : ''
-  if (!categoryName) {
-    return selectedCategoryId ?? null
-  }
-
-  const existingCategory = blogCategories.value.find(cat => cat.name === categoryName)
-  if (existingCategory) {
-    return existingCategory.id
-  }
-
-  const catRes = await createCategory({ name: categoryName })
-  const newCat = catRes.data?.data || catRes.data
-  await loadNotebookCategories()
-  return newCat.id
-}
-
 // 方法
 const setFilter = (filter) => {
   currentFilter.value = filter
   currentNotebook.value = null
-  notebookStore.setCurrentNotebook(null)
-  currentNote.value = null
-  notebookStore.setCurrentNote(null)
   loadNotes()
 }
 
@@ -1223,12 +1115,26 @@ const handleAddToKnowledgeBase = async () => {
 
     if (data.code === 0) {
       const result = data.data
-      ElMessage.success(`笔记“${result.noteTitle}”已成功添加到个人知识库`)
-
-      // 显示处理结果详情
-      setTimeout(() => {
-        ElMessage.info(`文件: ${result.fileName}，大小: ${(result.fileSize / 1024 / 1024).toFixed(2)}MB，文档数: ${result.processResult.documentCount}`)
-      }, 1000)
+      if (result.status === 'processing') {
+        ElMessage.success({
+          message: `笔记”${result.noteTitle}”已提交到知识库，向量化正在后台处理中`,
+          duration: 5000
+        })
+        // 延迟刷新文档列表，等后台处理完成
+        setTimeout(() => {
+          ElMessage.info({
+            message: '向量嵌入正在后台执行，稍后在知识库中即可检索该笔记',
+            duration: 4000
+          })
+        }, 2000)
+      } else {
+        ElMessage.success(`笔记”${result.noteTitle}”已成功添加到个人知识库`)
+        if (result.processResult) {
+          setTimeout(() => {
+            ElMessage.info(`文件: ${result.fileName}，文档数: ${result.processResult.documentCount}`)
+          }, 1000)
+        }
+      }
     } else {
       ElMessage.error(data.message || '添加到知识库失败')
     }
@@ -1264,37 +1170,22 @@ const triggerImportMd = () => {
 const handleImportMd = async (event) => {
   const file = event.target.files[0]
   if (!file) return
-  if (!file.name.toLowerCase().endsWith('.md')) {
-    ElMessage.error('仅支持导入 .md 文件')
-    event.target.value = ''
-    return
-  }
-  if (file.size > MAX_UPLOAD_SIZE_MB * 1024 * 1024) {
-    ElMessage.error(`文件大小不能超过 ${MAX_UPLOAD_SIZE_MB}MB`)
-    event.target.value = ''
-    return
-  }
   // 确保有选中的笔记本
   if (!currentNotebook.value) {
     currentNotebook.value = notebookStore.notebooks[0]
     notebookStore.setCurrentNotebook(currentNotebook.value)
   }
-  const uploadTask = pushUploadTask(file, `Markdown 导入 · ${file.name}`)
   try {
-    const response = await importNoteFromMarkdown(currentNotebook.value.id, file, {
-      onUploadProgress: (progressEvent) => updateUploadTaskProgress(uploadTask, progressEvent)
-    })
+    const response = await importNoteFromMarkdown(currentNotebook.value.id, file)
     const data = response.data
     const createdNote = data.data || data
     notebookStore.addNote(createdNote)
     currentNote.value = { ...createdNote }
     notebookStore.setCurrentNote(createdNote)
     await loadNotes()
-    finishUploadTask(uploadTask)
     ElMessage.success('MD文件导入成功')
   } catch (error) {
     console.error('导入MD文件失败:', error)
-    finishUploadTask(uploadTask, error)
     ElMessage.error('导入MD文件失败')
   } finally {
     event.target.value = ''
@@ -1322,20 +1213,8 @@ const handleExportMd = async () => {
   }
 }
 
-const optimizeProgress = ref(0)
-const optimizeTaskMeta = reactive({
-  totalChunks: 0,
-  completedChunks: 0,
-  stage: 'pending',
-  stageLabel: '等待开始'
-})
-
-const clearOptimizePolling = () => {
-  if (optimizeTimer.value) {
-    clearTimeout(optimizeTimer.value)
-    optimizeTimer.value = null
-  }
-}
+const optimizeTimer = ref(null)
+const optimizeTaskId = ref(null)
 
 const handleOptimizeFormat = async () => {
   if (!currentNote.value || !currentNote.value.id) {
@@ -1344,14 +1223,7 @@ const handleOptimizeFormat = async () => {
   }
   try {
     await ElMessageBox.confirm('AI将优化当前笔记的格式，原内容将被替换，是否继续？', '提示', { type: 'warning' })
-    clearOptimizePolling()
     aiOptimizing.value = true
-    optimizeTaskId.value = ''
-    optimizeProgress.value = 0
-    optimizeTaskMeta.totalChunks = 0
-    optimizeTaskMeta.completedChunks = 0
-    optimizeTaskMeta.stage = 'pending'
-    optimizeTaskMeta.stageLabel = '等待开始'
     ElMessage.info('AI优化任务已提交，正在处理中...')
 
     const noteId = currentNote.value.id
@@ -1371,70 +1243,50 @@ const handleOptimizeFormat = async () => {
       console.error('AI优化失败:', error)
       ElMessage.error('AI优化失败: ' + (error.message || '未知错误'))
     }
-    clearOptimizePolling()
-    optimizeTaskId.value = ''
     aiOptimizing.value = false
   }
 }
 
 const startOptimizePolling = (taskId, noteId) => {
-  clearOptimizePolling()
+  if (optimizeTimer.value) clearInterval(optimizeTimer.value)
 
   const deadline = Date.now() + 300000 // 5分钟超时
 
-  const poll = async () => {
-    if (optimizeTaskId.value !== taskId) {
-      return
-    }
-
+  optimizeTimer.value = setInterval(async () => {
     if (Date.now() > deadline) {
-      clearOptimizePolling()
-      optimizeTaskId.value = ''
+      clearInterval(optimizeTimer.value)
+      optimizeTimer.value = null
       aiOptimizing.value = false
       ElMessage.error('AI优化超时，请稍后重试')
       return
     }
-
     try {
       const res = await getOptimizeTask(taskId)
       const data = res.data?.data
       if (!data || typeof data.status !== 'string') {
-        clearOptimizePolling()
-        optimizeTaskId.value = ''
+        clearInterval(optimizeTimer.value)
+        optimizeTimer.value = null
         aiOptimizing.value = false
         ElMessage.error('任务状态异常')
         return
       }
 
-      optimizeProgress.value = Number(data.progress || 0)
-      optimizeTaskMeta.totalChunks = Number(data.totalChunks || 0)
-      optimizeTaskMeta.completedChunks = Number(data.completedChunks || 0)
-      optimizeTaskMeta.stage = data.stage || 'running'
-      optimizeTaskMeta.stageLabel = data.stageLabel || 'AI优化中'
-
       if (data.status === 'pending' || data.status === 'running') {
-        optimizeTimer.value = setTimeout(() => {
-          void poll()
-        }, 2000)
-        return
+        return // 继续轮询
       }
 
       // done 或 error，停止轮询
-      clearOptimizePolling()
-      optimizeTaskId.value = ''
+      clearInterval(optimizeTimer.value)
+      optimizeTimer.value = null
       aiOptimizing.value = false
 
       if (data.status === 'done') {
-        optimizeProgress.value = 100
         if (currentNote.value && currentNote.value.id === noteId) {
-          const response = await getNote(noteId)
-          const noteData = response.data?.data || response.data
-          currentNote.value = { ...noteData }
-          notebookStore.setCurrentNote(noteData)
-          await loadNotes()
+          currentNote.value.contentMd = data.result
+          await saveNote()
           ElMessage.success('AI格式优化完成')
         } else {
-          ElMessage.warning('AI优化完成，但当前笔记已切换，请重新打开笔记查看最新内容')
+          ElMessage.warning('AI优化完成，但当前笔记已切换，结果未写入')
         }
       } else if (data.status === 'error') {
         ElMessage.error('AI优化失败: ' + (data.error || '未知错误'))
@@ -1445,74 +1297,56 @@ const startOptimizePolling = (taskId, noteId) => {
 
     } catch (e) {
       // 任务不存在（可能已过期）时停止轮询
-      clearOptimizePolling()
-      optimizeTaskId.value = ''
+      clearInterval(optimizeTimer.value)
+      optimizeTimer.value = null
       aiOptimizing.value = false
       ElMessage.error('AI优化失败: ' + (e.message || '未知错误'))
     }
-  }
-
-  void poll()
+  }, 2000)
 }
 
-const handleSubmitNotebook = async () => {
+const handleCreateNotebook = async () => {
   if (!notebookFormRef.value) return
 
   try {
     await notebookFormRef.value.validate()
-    const notebookId = editingNotebookId.value
-    const actionText = notebookId ? '更新' : '创建'
-    const payload = {
-      name: notebookForm.name.trim(),
-      description: notebookForm.description?.trim() || '',
-      categoryId: await resolveNotebookCategoryId(notebookForm.categoryId, notebookNewCategoryName.value)
+
+    // 若categoryId 是字符串（新输入的分类名），先创建分类
+    if (notebookForm.categoryId && typeof notebookForm.categoryId === 'string') {
+      const catRes = await createCategory({ name: notebookForm.categoryId })
+      const newCat = catRes.data?.data || catRes.data
+      notebookForm.categoryId = newCat.id
+      blogCategories.value.push(newCat)
     }
 
-    if (notebookId) {
-      const response = await updateNotebook(notebookId, payload)
-      const data = response.data
-      const updatedNotebook = data.data || data
-
-      notebookStore.updateNotebook(notebookId, updatedNotebook)
-      if (currentNotebook.value?.id === notebookId) {
-        currentNotebook.value = { ...currentNotebook.value, ...updatedNotebook }
-        notebookStore.setCurrentNotebook(currentNotebook.value)
-      }
-
-      showCreateNotebook.value = false
-      ElMessage.success('笔记本更新成功')
-      return
-    }
-
-    const response = await createNotebook(payload)
+    const response = await createNotebook(notebookForm)
     const data = response.data
 
+    // 添加到store并选择新创建的笔记本
     const notebookData = data.data || data
     notebookStore.addNotebook(notebookData)
     currentNotebook.value = notebookData
     notebookStore.setCurrentNotebook(notebookData)
     currentFilter.value = 'notebook'
 
+    // 重新加载笔记列表
     await loadNotes()
 
+    // 重置表单
+    notebookForm.name = ''
+    notebookForm.description = ''
+    notebookForm.categoryId = null
     showCreateNotebook.value = false
+
     ElMessage.success('笔记本创建成功')
 
   } catch (error) {
-    if (error !== false) {
-      const actionText = editingNotebookId.value ? '更新' : '创建'
-      console.error(`${actionText}笔记本失败:`, error)
-      ElMessage.error(`${actionText}笔记本失败`)
-    }
+    console.error('创建笔记本失败:', error)
+    ElMessage.error('创建笔记本失败')
   }
 }
 
 const handleNotebookCommand = async (command, notebook) => {
-  if (command === 'edit') {
-    await openEditNotebookDialog(notebook)
-    return
-  }
-
   if (command === 'delete') {
     try {
       await ElMessageBox.confirm('确定删除这个笔记本吗？', '提示', {
@@ -1524,18 +1358,9 @@ const handleNotebookCommand = async (command, notebook) => {
       notebookStore.removeNotebook(notebook.id)
 
       if (currentNotebook.value?.id === notebook.id) {
-        const nextNotebook = notebookStore.notebooks[0] || null
-        currentNotebook.value = nextNotebook
-        notebookStore.setCurrentNotebook(nextNotebook)
-        currentFilter.value = nextNotebook ? 'notebook' : 'all'
-      }
-
-      if (currentNote.value?.notebookId === notebook.id || currentNotebook.value == null) {
+        currentNotebook.value = null
         currentNote.value = null
-        notebookStore.setCurrentNote(null)
       }
-
-      await loadNotes()
 
       ElMessage.success('删除成功')
 
@@ -1577,29 +1402,24 @@ const handleProfileAvatarUpload = async (options) => {
     options.onError?.(new Error('invalid file type'))
     return
   }
-  if (file.size > MAX_UPLOAD_SIZE_MB * 1024 * 1024) {
-    ElMessage.error(`图片大小不能超过${MAX_UPLOAD_SIZE_MB}MB`)
+  if (file.size > 2 * 1024 * 1024) {
+    ElMessage.error('图片大小不能超过2MB')
     options.onError?.(new Error('file too large'))
     return
   }
 
-  const uploadTask = pushUploadTask(file, `头像上传 · ${file.name}`)
   avatarUploading.value = true
   try {
-    const response = await uploadFile(file, {
-      onUploadProgress: (progressEvent) => updateUploadTaskProgress(uploadTask, progressEvent)
-    })
+    const response = await uploadFile(file)
     const fileInfo = response.data?.data
     if (!fileInfo?.fileUrl) {
       throw new Error('上传结果缺少文件地址')
     }
     profileForm.avatarUrl = fileInfo.fileUrl
-    finishUploadTask(uploadTask)
     ElMessage.success('头像上传成功')
     options.onSuccess?.(fileInfo)
   } catch (error) {
     console.error('头像上传失败:', error)
-    finishUploadTask(uploadTask, error)
     ElMessage.error('头像上传失败')
     options.onError?.(error)
   } finally {
@@ -1774,7 +1594,8 @@ onMounted(async () => {
   }
   try {
     // 加载分类
-    await loadNotebookCategories()
+    const catRes = await getMyCategories()
+    blogCategories.value = catRes.data?.data || catRes.data || []
 
     // 先加载笔记本
     await loadNotebooks()
@@ -1799,7 +1620,6 @@ onUnmounted(() => {
   if (autoSaveTimer) {
     clearTimeout(autoSaveTimer)
   }
-  clearOptimizePolling()
   window.removeEventListener('resize', handleWindowResize)
 })
 </script>

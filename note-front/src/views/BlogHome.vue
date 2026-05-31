@@ -1,24 +1,26 @@
 <template>
   <div class="blog-home">
+    <div class="reading-progress" :style="{ width: scrollProgress + '%' }"></div>
     <SakuraBackground />
-    <div class="reading-progress" :style="{ width: `${scrollProgress}%` }"></div>
+    <div class="ambient ambient-a"></div>
+    <div class="ambient ambient-b"></div>
+    <div class="ambient ambient-c"></div>
 
     <header class="topbar">
       <div class="brand-block">
-        <span class="panel-kicker">SIGNAL LANDING</span>
-        <h1 class="brand-name">AEzer0 的博客</h1>
-        <p class="brand-sub">
-          记录代码、系统、阅读与值得反复回看的想法。
-        </p>
-        <p class="brand-note">
-          这里更像一个安静的个人阅读入口，适合慢慢看，而不是匆匆扫过。
-        </p>
+        <div class="brand-emblem">
+          <span>H</span>
+        </div>
+        <div>
+          <div class="brand-name">AEzer0's Blog</div>
+          <div class="brand-sub">这里放着我的思考、灵感，还有一些舍不得丢掉的句子。</div>
+        </div>
       </div>
 
       <div class="topbar-actions">
         <el-input
           v-model="keyword"
-          placeholder="搜一篇文章、分类、标签或关键词"
+          placeholder="搜一搜文章、分类，或者你此刻想看的内容"
           clearable
           @clear="loadPosts"
           @keyup.enter="loadPosts"
@@ -26,62 +28,44 @@
           class="search-input"
         />
         <router-link v-if="isLoggedIn" to="/notebook">
-          <el-button class="soft-btn">进入工作台</el-button>
+          <el-button class="soft-btn">工作台</el-button>
         </router-link>
         <router-link v-if="isDefaultAdmin" to="/blog/manage">
-          <el-button class="glow-btn">管理博客</el-button>
+          <el-button class="glow-btn">进入管理台</el-button>
         </router-link>
       </div>
     </header>
 
     <section class="overview-strip">
       <article class="overview-card">
-        <div class="overview-head">
-          <span class="overview-mark">DAY</span>
-          <span class="overview-label">今日文章</span>
-        </div>
-        <strong>{{ todayPostsCount }}</strong>
-        <small>当前筛选结果里今天新增的阅读内容。</small>
-      </article>
-
-      <article class="overview-card">
-        <div class="overview-head">
-          <span class="overview-mark">TXT</span>
-          <span class="overview-label">公开文章</span>
-        </div>
+        <span>公开文章</span>
         <strong>{{ total }}</strong>
-        <small>已经整理好、可以直接开始阅读的公开内容。</small>
+        <small>已经认真写完并放出来的内容</small>
       </article>
-
       <article class="overview-card">
-        <div class="overview-head">
-          <span class="overview-mark">TAG</span>
-          <span class="overview-label">标签索引</span>
-        </div>
-        <strong>{{ tags.length }}</strong>
-        <small>帮助你快速串联相关文章的阅读线索。</small>
+        <span>分类目录</span>
+        <strong>{{ categories.length }}</strong>
+        <small>按兴趣分好的阅读入口</small>
       </article>
-
+      <article class="overview-card">
+        <span>标签索引</span>
+        <strong>{{ tags.length }}</strong>
+        <small>一些能顺藤摸瓜的小线索</small>
+      </article>
       <article class="overview-card accent">
-        <div class="overview-head">
-          <span class="overview-mark">PULSE</span>
-          <span class="overview-label">灵感坐标</span>
-        </div>
+        <span>可见热度</span>
         <strong>{{ visibleViewCount }}</strong>
-        <small>当前页面里这些文章累计收获的阅读次数。</small>
+        <small>这些文字被路过的人看了这么多次</small>
       </article>
     </section>
 
     <section class="category-bridge">
       <div class="category-bridge-head">
         <div>
-          <div class="control-label">阅读方向</div>
-          <h2 class="bridge-title">今天想从哪里开始？</h2>
-          <p class="bridge-sub">
-            选择一个方向，快速进入你的阅读状态。
-          </p>
+          <div class="control-label">分类漫游</div>
+          <h2 class="bridge-title">先挑一个你今天想读的方向</h2>
         </div>
-        <span class="bridge-meta">共 {{ categories.length }} 个主题入口</span>
+        <span class="bridge-meta">{{ categories.length }} 个话题入口</span>
       </div>
 
       <div class="category-pills">
@@ -102,97 +86,47 @@
     <section class="showcase-grid">
       <article v-if="featuredPost" class="feature-stage" @click="goDetail(featuredPost.id)">
         <div class="feature-copy">
-          <div class="feature-topline">
-            <span class="panel-kicker">首页推荐</span>
-            <span class="hero-badge">今日主阅读入口</span>
-            <span v-if="featuredPost.isTop" class="hero-badge primary">置顶</span>
-            <span v-if="featuredPost.categoryName" class="hero-badge muted">{{ featuredPost.categoryName }}</span>
-          </div>
-
-          <h2 class="feature-title">{{ featuredPost.title }}</h2>
-          <p class="feature-summary">{{ featureSummary }}</p>
+          <div class="feature-kicker">Featured Entry</div>
+          <h1 class="feature-title">{{ featuredPost.title }}</h1>
+          <p class="feature-summary">
+            {{
+              featuredPost.summary ||
+              '如果你是第一次来，不妨先从这篇开始。它很适合作为进入这个博客的第一扇门。'
+            }}
+          </p>
 
           <div class="feature-meta">
             <span>{{ formatDate(featuredPost.publishTime) }}</span>
-            <span>预计 {{ featuredReadMinutes }} 分钟读完</span>
-            <span>{{ formatCompactNumber(featuredWordCount) }} 字</span>
-            <span>{{ featuredPost.viewCount || 0 }} 次阅读</span>
-          </div>
-
-          <div class="feature-signal-grid">
-            <article class="signal-card">
-              <span class="signal-label">当前阅读范围</span>
-              <strong class="signal-value">{{ selectedCategoryName || '全部' }}</strong>
-              <small class="signal-hint">你当前正在浏览的阅读方向。</small>
-            </article>
-            <article class="signal-card">
-              <span class="signal-label">今日更新</span>
-              <strong class="signal-value">{{ todayPostsCount }}</strong>
-              <small class="signal-hint">当前页数据里今天发布的文章数量。</small>
-            </article>
-            <article class="signal-card">
-              <span class="signal-label">后续文章</span>
-              <strong class="signal-value">{{ feedPosts.length }}</strong>
-              <small class="signal-hint">推荐文章下方还有多少篇可继续阅读。</small>
-            </article>
+            <span v-if="featuredPost.categoryName">{{ featuredPost.categoryName }}</span>
+            <span>阅读 {{ featuredPost.viewCount || 0 }}</span>
           </div>
 
           <div class="feature-actions">
             <button class="inline-action primary" @click.stop="goDetail(featuredPost.id)">阅读全文</button>
-            <button class="inline-action" @click.stop="scrollToFeed">继续查看其余文章</button>
+            <button class="inline-action" @click.stop="clearAllFilters">浏览全部文章</button>
           </div>
         </div>
 
-        <div class="feature-side">
-          <div class="feature-visual">
-            <img v-if="featuredPost.coverUrl" :src="featuredPost.coverUrl" class="feature-cover" alt="" />
-            <div v-else class="feature-fallback">
-              <span class="cover-badge">{{ featuredPost.categoryName || '博客' }}</span>
-              <strong class="cover-mark">{{ getPostMark(featuredPost.categoryName || featuredPost.title) }}</strong>
-              <p>{{ featureSummary }}</p>
-            </div>
-          </div>
-
-          <div class="feature-outline">
-            <div class="outline-head">
-              <div>
-                <span class="panel-kicker">阅读指引</span>
-                <h3>可以这样浏览这个页面</h3>
-              </div>
-              <span class="outline-count">{{ filteredPosts.length }} 篇文章</span>
-            </div>
-            <div class="outline-item">
-              <span class="outline-level">01</span>
-              <span class="outline-text">先从推荐文章开始，快速进入当前主题。</span>
-            </div>
-            <div class="outline-item" v-if="feedPosts.length">
-              <span class="outline-level">02</span>
-              <span class="outline-text">再继续往下看另外 {{ feedPosts.length }} 篇相关文章。</span>
-            </div>
-            <div class="outline-item">
-              <span class="outline-level">03</span>
-              <span class="outline-text">右侧栏还能帮助你查看最近更新、分类入口和标签归档。</span>
-            </div>
-          </div>
+        <div class="feature-visual">
+          <img v-if="featuredPost.coverUrl" :src="featuredPost.coverUrl" class="feature-cover" alt="" />
+          <div v-else class="feature-fallback">{{ getPostMark(featuredPost.categoryName) }}</div>
         </div>
       </article>
 
       <article v-else class="feature-stage empty">
         <div class="feature-copy">
-          <div class="panel-kicker">首页推荐</div>
-          <h2 class="feature-title">首页正在等待下一篇公开文章。</h2>
-          <p class="feature-summary">
-            下一篇公开内容发布后，会自动出现在这里作为新的阅读入口。
-          </p>
+          <div class="feature-kicker">Featured Entry</div>
+          <h1 class="feature-title">这里很快会热闹起来</h1>
+          <p class="feature-summary">第一篇公开文章还在路上。等它出现，这里就会成为整座博客的开场白。</p>
         </div>
       </article>
 
-      <aside class="blog-sidebar">
+      <aside class="about-stack">
         <section class="aside-card about-card">
-          <div class="aside-kicker">关于这里</div>
-          <h3 class="aside-title">写一些真实的东西，留给愿意慢慢读的人。</h3>
+          <div class="aside-kicker">About</div>
+          <h3 class="aside-title">写一点真实的东西，留给愿意读的人</h3>
           <p class="aside-desc">
-            这里会放技术笔记、阶段性总结，以及那些值得回头再看的思考片段。
+            这里记录技术、想法、生活里的碎片，也收留一些深夜突然想明白的小事。更新未必勤快，但大多数时候，我会尽量写得认真一点。
           </p>
 
           <div class="about-stats">
@@ -211,201 +145,64 @@
           </div>
 
           <div class="publishing-note">
-            <div class="aside-kicker">这个空间</div>
-            <h4 class="publishing-title">没有标准答案，只有持续生长的想法。</h4>
+            <div class="aside-kicker">About This Place</div>
+            <h4 class="publishing-title">这里没有标准答案，只有持续留下的想法</h4>
             <p class="publishing-desc">
-              有些文章更偏工程实践，有些更像缓慢整理后的个人思考，但都会尽量保持清晰、耐读。
+              你会看到一些技术记录、一些经验总结，也会碰到偶尔跑偏的随笔。它们不一定都很郑重，但都是我认真留下来的东西。
             </p>
 
             <div class="publishing-actions">
               <button class="inline-action primary" @click="clearAllFilters">查看全部文章</button>
-              <button v-if="featuredPost" class="inline-action" @click="goDetail(featuredPost.id)">阅读推荐文章</button>
+              <button v-if="featuredPost" class="inline-action" @click="goDetail(featuredPost.id)">先看推荐内容</button>
             </div>
           </div>
         </section>
 
         <section class="aside-card pulse-card">
-          <div class="aside-kicker">阅读状态</div>
+          <div class="aside-kicker">Reading Pulse</div>
           <div class="pulse-row">
             <div>
               <h3 class="pulse-title">{{ selectedCategoryName || '全部分类' }}</h3>
-              <p class="pulse-desc">当前阅读状态下可见 {{ filteredPosts.length }} 篇文章。</p>
+              <p class="pulse-desc">这一页里一共有 {{ filteredPosts.length }} 篇内容，慢慢翻就好。</p>
             </div>
-            <span class="pulse-badge">
-              {{ selectedTagIds.length ? `已选 ${selectedTagIds.length} 个标签` : '开放浏览模式' }}
-            </span>
-          </div>
-        </section>
-        <!--
-        <section v-if="recentPosts.length" class="aside-card compact-card">
-          <div class="aside-row">
-            <h3 class="aside-title small">鏈€杩戞洿鏂?/h3>
-          </div>
-          <div class="mini-list">
-            <button
-              v-for="post in recentPosts"
-              :key="post.id"
-              class="mini-item"
-              @click="goDetail(post.id)"
-            >
-              <span class="mini-item-title">{{ post.title }}</span>
-              <span class="mini-item-date">{{ formatDate(post.publishTime) }}</span>
-            </button>
-          </div>
-        </section>
-
-        <section v-if="sidebarPostGroups.length" class="aside-card compact-card">
-          <div class="aside-row">
-            <h3 class="aside-title small">鎸夊垎绫绘祻瑙?/h3>
-          </div>
-          <div class="mini-list">
-            <button
-              v-for="group in sidebarPostGroups"
-              :key="group.key"
-              class="mini-item compact"
-              @click="group.key !== uncategorizedKey ? selectCategory(group.key) : selectCategory(null)"
-            >
-              <span class="mini-item-title">{{ group.label }}</span>
-              <span class="mini-item-date">{{ group.posts.length }}</span>
-            </button>
-          </div>
-        </section>
-
-        <section v-if="tags.length" class="aside-card compact-card">
-          <div class="aside-row">
-            <h3 class="aside-title small">鏍囩褰掓。</h3>
-            <button v-if="selectedTagIds.length" class="tiny-action" @click="clearTagFilter">娓呯┖</button>
-          </div>
-          <div class="tag-cloud">
-            <button
-              v-for="tag in tags"
-              :key="tag.id"
-              type="button"
-              :class="['cloud-tag', { active: selectedTagIds.includes(tag.id) }]"
-              @click="toggleTag(tag.id)"
-            >
-              {{ tag.name }}
-            </button>
-          </div>
-        </section>
-        -->
-
-        <section v-if="recentPosts.length" class="aside-card compact-card">
-          <div class="aside-row">
-            <h3 class="aside-title small">最近更新</h3>
-          </div>
-          <div class="mini-list">
-            <button
-              v-for="post in recentPosts"
-              :key="post.id"
-              class="mini-item"
-              @click="goDetail(post.id)"
-            >
-              <span class="mini-item-title">{{ post.title }}</span>
-              <span class="mini-item-date">{{ formatDate(post.publishTime) }}</span>
-            </button>
-          </div>
-        </section>
-
-        <section v-if="sidebarPostGroups.length" class="aside-card compact-card">
-          <div class="aside-row">
-            <h3 class="aside-title small">按分类浏览</h3>
-          </div>
-          <div class="mini-list">
-            <button
-              v-for="group in sidebarPostGroups"
-              :key="group.key"
-              class="mini-item compact"
-              @click="group.key !== uncategorizedKey ? selectCategory(group.key) : selectCategory(null)"
-            >
-              <span class="mini-item-title">{{ group.label }}</span>
-              <span class="mini-item-date">{{ group.posts.length }}</span>
-            </button>
-          </div>
-        </section>
-
-        <section v-if="tags.length" class="aside-card compact-card">
-          <div class="aside-row">
-            <h3 class="aside-title small">标签归档</h3>
-            <button v-if="selectedTagIds.length" class="tiny-action" @click="clearTagFilter">清空</button>
-          </div>
-          <div class="tag-cloud">
-            <button
-              v-for="tag in tags"
-              :key="tag.id"
-              type="button"
-              :class="['cloud-tag', { active: selectedTagIds.includes(tag.id) }]"
-              @click="toggleTag(tag.id)"
-            >
-              {{ tag.name }}
-            </button>
+            <span class="pulse-badge">{{
+              selectedTagIds.length ? `${selectedTagIds.length} 个标签筛选中` : '随便逛逛模式'
+            }}</span>
           </div>
         </section>
       </aside>
     </section>
 
     <section v-if="tags.length" class="control-panel">
-      <div class="control-row">
-        <div>
+      <div class="control-block">
+        <div class="control-row">
           <div class="control-label">标签筛选</div>
-          <p class="control-sub">用更细一点的标签，帮你缩小阅读范围，但不会打断整体浏览节奏。</p>
+          <button v-if="hasFilters" class="tiny-action" @click="clearAllFilters">清空</button>
         </div>
-        <button v-if="hasFilters" class="tiny-action" @click="clearAllFilters">清空筛选</button>
-      </div>
-
-      <div class="tag-pills">
-        <button
-          v-for="tag in topTags"
-          :key="tag.id"
-          :class="['tag-pill', { active: selectedTagIds.includes(tag.id) }]"
-          @click="toggleTag(tag.id)"
-        >
-          # {{ tag.name }}
-        </button>
+        <div class="tag-pills">
+          <button
+            v-for="tag in topTags"
+            :key="tag.id"
+            :class="['tag-pill', { active: selectedTagIds.includes(tag.id) }]"
+            @click="toggleTag(tag.id)"
+          >
+            # {{ tag.name }}
+          </button>
+        </div>
       </div>
     </section>
 
     <div class="content-layout">
-      <main class="feed-column" ref="feedSectionRef">
-        <section v-if="tags.length" class="control-panel embedded-control-panel">
-          <div class="control-row">
-            <div>
-              <div class="control-label">标签筛选</div>
-              <p class="control-sub">用更细一点的标签，帮你缩小阅读范围，但不会打断整体浏览节奏。</p>
-            </div>
-            <button v-if="hasFilters" class="tiny-action" @click="clearAllFilters">清空筛选</button>
-          </div>
-
-          <div class="tag-pills">
-            <button
-              v-for="tag in topTags"
-              :key="tag.id"
-              :class="['tag-pill', { active: selectedTagIds.includes(tag.id) }]"
-              @click="toggleTag(tag.id)"
-            >
-              # {{ tag.name }}
-            </button>
-          </div>
-        </section>
-
+      <main class="feed-column">
         <div class="section-head">
           <div>
-            <div class="section-kicker">最近写下的内容</div>
-            <h2 class="section-title">最近文章，按更清晰的阅读流排列</h2>
+            <div class="section-kicker">Fresh Notes</div>
+            <h2 class="section-title">最近写下的内容</h2>
           </div>
           <div class="section-meta">
-            <span>{{ filteredPosts.length }} 篇文章</span>
+            <span>{{ filteredPosts.length }} 篇内容</span>
             <span>{{ selectedCategoryName || '全部分类' }}</span>
-            <span v-if="featuredPost">推荐文章已在上方展示</span>
           </div>
-        </div>
-
-        <div v-if="featuredPost" class="feed-intro-card">
-          <span class="panel-kicker">文章流</span>
-          <h3>继续阅读剩下的内容</h3>
-          <p>
-            上方推荐文章是主入口，下面则按更清晰的顺序展示其余公开文章。
-          </p>
         </div>
 
         <transition-group name="card-fade" tag="div" class="feed-list" v-loading="loading">
@@ -419,7 +216,7 @@
               <img :src="post.coverUrl" class="feed-cover" alt="" />
             </div>
             <div v-else class="feed-cover-box fallback">
-              <span>{{ getPostMark(post.categoryName || post.title) }}</span>
+              <span>{{ getPostMark(post.categoryName) }}</span>
             </div>
 
             <div class="feed-content">
@@ -429,20 +226,20 @@
                 <span class="feed-date">{{ formatDate(post.publishTime) }}</span>
               </div>
               <h3 class="feed-title">{{ post.title }}</h3>
-              <p class="feed-summary">{{ post.summary || fallbackSummary(post) }}</p>
+              <p class="feed-summary">{{ post.summary || '这篇没有提前剧透，适合直接点进去读。' }}</p>
               <div class="feed-footer">
                 <div class="feed-tags" v-if="post.tags && post.tags.length">
                   <span v-for="tag in post.tags" :key="tag.id" class="feed-tag"># {{ tag.name }}</span>
                 </div>
-                <div class="feed-views">{{ estimateReadMinutes(post) }} 分钟 / {{ post.viewCount || 0 }} 次阅读</div>
+                <div class="feed-views">阅读 {{ post.viewCount || 0 }}</div>
               </div>
             </div>
           </article>
         </transition-group>
 
         <div v-if="!loading && filteredPosts.length === 0" class="empty-state">
-          <div class="empty-mark">CALM</div>
-          <p>当前筛选条件下还没有公开文章，试试放宽筛选继续浏览。</p>
+          <div class="empty-mark">HALO</div>
+          <p>这里暂时还很安静，等下一篇文章来打破沉默。</p>
         </div>
 
         <div class="pagination" v-if="total > pageSize">
@@ -458,9 +255,9 @@
       </main>
 
       <aside class="aside-column">
-        <section v-if="recentPosts.length" class="aside-card compact-card">
+        <section v-if="recentPosts.length" class="aside-card">
           <div class="aside-row">
-            <h3 class="aside-title small">最近更新</h3>
+            <h3 class="aside-title small">刚刚更新</h3>
           </div>
           <div class="mini-list">
             <button
@@ -475,16 +272,16 @@
           </div>
         </section>
 
-        <section v-if="sidebarPostGroups.length" class="aside-card compact-card">
+        <section v-if="sidebarPostGroups.length" class="aside-card">
           <div class="aside-row">
-            <h3 class="aside-title small">按分类浏览</h3>
+            <h3 class="aside-title small">按分类找文章</h3>
           </div>
           <div class="mini-list">
             <button
               v-for="group in sidebarPostGroups"
               :key="group.key"
               class="mini-item compact"
-              @click="group.key !== uncategorizedKey ? selectCategory(group.key) : selectCategory(null)"
+              @click="group.key !== '__uncategorized__' ? selectCategory(group.key) : selectCategory(null)"
             >
               <span class="mini-item-title">{{ group.label }}</span>
               <span class="mini-item-date">{{ group.posts.length }}</span>
@@ -492,21 +289,20 @@
           </div>
         </section>
 
-        <section v-if="tags.length" class="aside-card compact-card">
+        <section v-if="tags.length" class="aside-card">
           <div class="aside-row">
-            <h3 class="aside-title small">标签归档</h3>
+            <h3 class="aside-title small">标签云</h3>
             <button v-if="selectedTagIds.length" class="tiny-action" @click="clearTagFilter">清空</button>
           </div>
           <div class="tag-cloud">
-            <button
+            <span
               v-for="tag in tags"
               :key="tag.id"
-              type="button"
               :class="['cloud-tag', { active: selectedTagIds.includes(tag.id) }]"
               @click="toggleTag(tag.id)"
             >
               {{ tag.name }}
-            </button>
+            </span>
           </div>
         </section>
       </aside>
@@ -521,8 +317,6 @@ import { Search } from '@element-plus/icons-vue'
 import SakuraBackground from '@/components/SakuraBackground.vue'
 import { getPublicBlogPosts, getMyTags, getPublicCategories } from '@/api/blog'
 import { useUserStore } from '@/store'
-
-const uncategorizedKey = '__uncategorized__'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -541,33 +335,8 @@ const selectedTagIds = ref([])
 const categories = ref([])
 const tags = ref([])
 const scrollProgress = ref(0)
-const feedSectionRef = ref(null)
 
 let scrollHandler = null
-
-const cleanMarkdownText = (content = '') => content
-  .replace(/```[\s\S]*?```/g, ' ')
-  .replace(/`[^`]*`/g, ' ')
-  .replace(/!\[[^\]]*\]\([^)]+\)/g, ' ')
-  .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-  .replace(/^#{1,6}\s+/gm, '')
-  .replace(/^>\s?/gm, '')
-  .replace(/[*_~|-]/g, ' ')
-  .replace(/\d+\.\s+/g, ' ')
-  .replace(/\n+/g, ' ')
-  .replace(/\s+/g, ' ')
-  .trim()
-
-const estimateReadMinutes = (post) => {
-  const words = cleanMarkdownText(post?.contentMd || '').length
-  return Math.max(1, Math.ceil(words / 420))
-}
-
-const fallbackSummary = (post) => {
-  const plain = cleanMarkdownText(post?.contentMd || '')
-  if (!plain) return '打开文章即可继续阅读全文。'
-  return plain.length > 110 ? `${plain.slice(0, 110)}...` : plain
-}
 
 const filteredPosts = computed(() => {
   if (selectedTagIds.value.length <= 1) return posts.value
@@ -583,28 +352,10 @@ const featuredPost = computed(() => {
   return filteredPosts.value.find((post) => post.isTop) || filteredPosts.value[0] || null
 })
 
-const featureSummary = computed(() => {
-  const featured = featuredPost.value
-  if (featured?.summary?.trim()) return featured.summary.trim()
-  const plain = cleanMarkdownText(featured?.contentMd || '')
-  return plain.length > 140 ? `${plain.slice(0, 140)}...` : (plain || '打开这篇推荐文章，进入今天最适合开始阅读的主线。')
-})
-
-const featuredWordCount = computed(() => cleanMarkdownText(featuredPost.value?.contentMd || '').length)
-const featuredReadMinutes = computed(() => Math.max(1, Math.ceil(featuredWordCount.value / 420)))
-
 const feedPosts = computed(() => {
-  const featured = featuredPost.value
-  if (!featured) return filteredPosts.value
-  return filteredPosts.value.filter((post) => post.id !== featured.id)
+  if (!featuredPost.value) return filteredPosts.value
+  return filteredPosts.value.filter((post) => post.id !== featuredPost.value.id)
 })
-
-const selectedCategoryName = computed(() => {
-  return categories.value.find((cat) => cat.id === selectedCategoryId.value)?.name || ''
-})
-
-const topTags = computed(() => tags.value.slice(0, 12))
-const hasFilters = computed(() => Boolean(selectedCategoryId.value || selectedTagIds.value.length || keyword.value))
 
 const recentPosts = computed(() => {
   return [...posts.value]
@@ -613,6 +364,7 @@ const recentPosts = computed(() => {
 })
 
 const sidebarPostGroups = computed(() => {
+  const uncategorizedKey = '__uncategorized__'
   const groups = new Map()
 
   filteredPosts.value.forEach((post) => {
@@ -639,15 +391,17 @@ const sidebarPostGroups = computed(() => {
 })
 
 const visibleViewCount = computed(() => {
-  return filteredPosts.value.reduce((sum, post) => sum + Number(post.viewCount || 0), 0)
+  return filteredPosts.value.reduce((sum, post) => sum + (post.viewCount || 0), 0)
 })
 
-const todayPostsCount = computed(() => {
-  const today = new Date().toDateString()
-  return filteredPosts.value.filter((post) => {
-    if (!post.publishTime) return false
-    return new Date(post.publishTime).toDateString() === today
-  }).length
+const selectedCategoryName = computed(() => {
+  return categories.value.find((cat) => cat.id === selectedCategoryId.value)?.name || ''
+})
+
+const topTags = computed(() => tags.value.slice(0, 12))
+
+const hasFilters = computed(() => {
+  return Boolean(selectedCategoryId.value || selectedTagIds.value.length || keyword.value)
 })
 
 const setupScrollProgress = () => {
@@ -658,7 +412,6 @@ const setupScrollProgress = () => {
   }
 
   window.addEventListener('scroll', scrollHandler, { passive: true })
-  scrollHandler()
 }
 
 const loadPosts = async () => {
@@ -675,7 +428,7 @@ const loadPosts = async () => {
     const data = res.data.data
     posts.value = data.data || data.records || []
     total.value = data.total || 0
-  } catch {
+  } catch (error) {
     posts.value = []
     total.value = 0
   } finally {
@@ -688,9 +441,8 @@ const loadSidebarData = async () => {
     const [categoryRes, tagRes] = await Promise.allSettled([getPublicCategories(), getMyTags()])
     if (categoryRes.status === 'fulfilled') categories.value = categoryRes.value.data.data || []
     if (tagRes.status === 'fulfilled') tags.value = tagRes.value.data.data || []
-  } catch {
-    categories.value = []
-    tags.value = []
+  } catch (error) {
+    // optional sidebar data
   }
 }
 
@@ -727,20 +479,15 @@ const clearAllFilters = () => {
   loadPosts()
 }
 
-const getPostMark = (text = '') => {
-  return (`${text}`.trim() || 'BL').slice(0, 2).toUpperCase()
+const getPostMark = (categoryName) => {
+  const text = (categoryName || '').trim()
+  return text ? text.charAt(0) : 'B'
 }
 
 const handlePageChange = (page) => {
   currentPage.value = page
   loadPosts()
   window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-const scrollToFeed = () => {
-  if (!feedSectionRef.value) return
-  const top = window.scrollY + feedSectionRef.value.getBoundingClientRect().top - 96
-  window.scrollTo({ top, behavior: 'smooth' })
 }
 
 const goDetail = (id) => {
@@ -757,18 +504,12 @@ const formatDate = (dateStr) => {
   })
 }
 
-const formatCompactNumber = (value) => {
-  const numeric = Number(value || 0)
-  if (numeric >= 10000) return `${(numeric / 10000).toFixed(1).replace(/\.0$/, '')}w`
-  if (numeric >= 1000) return `${(numeric / 1000).toFixed(1).replace(/\.0$/, '')}k`
-  return `${numeric}`
-}
-
 onMounted(async () => {
   if (userStore.isLoggedIn && !userStore.userInfo) {
     try {
       await userStore.fetchUserInfo()
-    } catch {
+    } catch (error) {
+      // ignore invalid session on public page
     }
   }
 
@@ -784,45 +525,27 @@ onUnmounted(() => {
 
 <style scoped>
 .blog-home {
-  --surface: rgba(255, 255, 255, 0.68);
-  --surface-strong: rgba(255, 255, 255, 0.78);
-  --surface-muted: rgba(252, 248, 247, 0.7);
-  --border: rgba(232, 220, 223, 0.56);
-  --border-soft: rgba(232, 220, 223, 0.42);
-  --text-main: #1f2a44;
-  --text-soft: #5f6779;
-  --text-mute: #7f8798;
-  --brand-1: #ef9ab6;
-  --brand-2: #f3c49a;
-  --brand-3: #9cbddc;
-  --shadow: 0 14px 30px rgba(40, 52, 73, 0.07);
+  --surface: rgba(255, 255, 255, 0.76);
+  --surface-strong: rgba(255, 255, 255, 0.88);
+  --border: rgba(175, 193, 232, 0.22);
+  --text-main: #24304b;
+  --text-soft: #69748f;
+  --brand-1: #6d8cff;
+  --brand-2: #83d8ea;
+  --brand-3: #ffc0d6;
+  --shadow: 0 18px 52px rgba(84, 100, 154, 0.12);
   position: relative;
   isolation: isolate;
   min-height: 100vh;
   overflow-x: hidden;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 12px 18px;
-  max-width: 1358px;
-  margin: 0 auto;
-  padding: 24px 20px 48px;
+  padding: 22px;
   color: var(--text-main);
   background:
-    radial-gradient(circle at 18% 10%, rgba(248, 228, 234, 0.12), transparent 18%),
-    radial-gradient(circle at 82% 12%, rgba(221, 233, 244, 0.12), transparent 20%),
-    linear-gradient(180deg, rgba(255, 249, 248, 0.82) 0%, rgba(255, 250, 249, 0.78) 56%, rgba(252, 253, 255, 0.8) 100%);
-}
-
-.blog-home::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(225, 226, 235, 0.18) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(225, 226, 235, 0.18) 1px, transparent 1px);
-  background-size: 36px 36px;
-  opacity: 0.14;
+    radial-gradient(circle at 8% 10%, rgba(255, 192, 214, 0.26), transparent 18%),
+    radial-gradient(circle at 88% 16%, rgba(131, 216, 234, 0.25), transparent 18%),
+    radial-gradient(circle at 76% 76%, rgba(255, 217, 154, 0.2), transparent 24%),
+    linear-gradient(180deg, #f7f7ff 0%, #fffaf7 42%, #f6f8ff 100%);
+  font-family: "Avenir Next", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 }
 
 .reading-progress {
@@ -830,116 +553,101 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   z-index: 999;
-  height: 4px;
-  border-radius: 0 999px 999px 0;
+  height: 3px;
   background: linear-gradient(90deg, var(--brand-1), var(--brand-2), var(--brand-3));
-  box-shadow: 0 0 18px rgba(239, 154, 182, 0.35);
   transition: width 0.15s ease;
+}
+
+.ambient {
+  position: fixed;
+  pointer-events: none;
+  filter: blur(54px);
+  opacity: 0.6;
+}
+
+.ambient-a {
+  top: 120px;
+  right: 8%;
+  width: 220px;
+  height: 220px;
+  background: rgba(131, 216, 234, 0.16);
+}
+
+.ambient-b {
+  top: 380px;
+  left: 6%;
+  width: 260px;
+  height: 260px;
+  background: rgba(255, 192, 214, 0.16);
+}
+
+.ambient-c {
+  bottom: 120px;
+  right: 18%;
+  width: 240px;
+  height: 240px;
+  background: rgba(255, 217, 154, 0.14);
 }
 
 .topbar,
 .overview-strip,
 .category-bridge,
-.feature-stage,
-.feed-column,
-.blog-sidebar {
+.showcase-grid,
+.control-panel,
+.content-layout {
   position: relative;
   z-index: 1;
-  margin: 0;
-}
-
-.topbar,
-.overview-strip,
-.category-bridge {
-  grid-column: 1 / -1;
-}
-
-.feature-stage,
-.feed-column {
-  grid-column: 1;
-}
-
-.blog-sidebar {
-  grid-column: 2;
-}
-
-.showcase-grid,
-.content-layout {
-  display: contents;
-}
-
-.blog-home > .control-panel {
-  display: none;
-}
-
-.aside-column {
-  display: none;
+  max-width: 1260px;
+  margin: 0 auto 18px;
 }
 
 .topbar {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
+  gap: 18px;
   align-items: center;
-  padding: 26px 28px;
+  padding: 18px 20px;
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.64);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(22px) saturate(135%);
+  backdrop-filter: blur(18px);
 }
 
 .brand-block {
-  max-width: 640px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
-.panel-kicker,
-.aside-kicker,
-.section-kicker,
-.control-label,
-.overview-label {
-  display: inline-block;
-  margin-bottom: 6px;
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #d585a1;
-  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
-}
-
-.brand-name,
-.feature-title,
-.aside-title,
-.section-title,
-.publishing-title,
-.bridge-title,
-.feed-title,
-.feature-outline h3,
-.feed-intro-card h3 {
-  font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", serif;
-  letter-spacing: -0.03em;
+.brand-emblem {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(145deg, rgba(109, 140, 255, 0.95), rgba(131, 216, 234, 0.92));
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(109, 140, 255, 0.24);
 }
 
 .brand-name {
-  margin: 0;
-  font-size: clamp(30px, 4vw, 42px);
-  line-height: 1.04;
-  font-weight: 800;
-  color: #22304a;
+  font-size: 20px;
+  font-weight: 700;
 }
 
-.brand-sub {
-  margin: 10px 0 0;
-  font-size: 15px;
-  line-height: 1.8;
-  color: var(--text-soft);
-}
-
-.brand-note {
-  margin: 8px 0 0;
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--text-mute);
+.brand-sub,
+.feature-kicker,
+.aside-kicker,
+.section-kicker,
+.control-label {
+  font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7b86a6;
 }
 
 .topbar-actions {
@@ -950,20 +658,14 @@ onUnmounted(() => {
 }
 
 .search-input {
-  width: 340px;
+  width: 320px;
 }
 
 .search-input :deep(.el-input__wrapper) {
   border-radius: 999px !important;
-  background: rgba(250, 251, 253, 0.96) !important;
+  background: rgba(255, 255, 255, 0.86) !important;
   box-shadow: none !important;
-  border: 1px solid rgba(218, 225, 236, 0.96) !important;
-  transition: border-color 0.22s ease, box-shadow 0.22s ease, transform 0.22s ease;
-}
-
-.search-input :deep(.el-input__wrapper.is-focus) {
-  border-color: rgba(151, 185, 220, 0.92) !important;
-  box-shadow: 0 0 0 4px rgba(191, 214, 234, 0.2) !important;
+  border: 1px solid rgba(169, 185, 255, 0.22) !important;
 }
 
 .soft-btn,
@@ -974,15 +676,15 @@ onUnmounted(() => {
 }
 
 .soft-btn {
-  background: rgba(255, 255, 255, 0.88) !important;
-  border: 1px solid var(--border) !important;
+  background: rgba(255, 255, 255, 0.78) !important;
+  border: 1px solid rgba(169, 185, 255, 0.24) !important;
   color: var(--text-main) !important;
 }
 
 .glow-btn {
-  background: linear-gradient(135deg, #f3c1d1, #f1d7b8) !important;
+  background: linear-gradient(135deg, #6d8cff, #83d8ea) !important;
   border: none !important;
-  color: #6b4860 !important;
+  color: #fff !important;
 }
 
 .overview-strip {
@@ -995,93 +697,57 @@ onUnmounted(() => {
 .feature-stage,
 .aside-card,
 .control-panel,
-.feed-column,
-.feed-intro-card {
+.feed-column {
   background: var(--surface);
-  backdrop-filter: blur(22px) saturate(135%);
-  border: 1px solid var(--border-soft);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow: var(--shadow);
 }
 
 .overview-card {
   padding: 18px 20px;
-  border-radius: 22px;
-  transition: transform 0.24s ease, box-shadow 0.24s ease;
+  border-radius: 24px;
 }
 
-.overview-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 22px 42px rgba(40, 52, 73, 0.1);
-}
-
-.overview-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.overview-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 42px;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #6b4860;
-  background: linear-gradient(135deg, rgba(242, 217, 226, 0.9), rgba(241, 233, 214, 0.92));
-}
-
-.overview-card strong {
-  display: block;
-  margin: 12px 0 6px;
-  font-size: 34px;
-  line-height: 1.05;
-  color: #24324b;
-}
-
+.overview-card span,
+.overview-card strong,
 .overview-card small {
   display: block;
-  line-height: 1.65;
+}
+
+.overview-card span,
+.overview-card small {
   color: var(--text-soft);
 }
 
-.overview-card.accent {
-  background: linear-gradient(135deg, rgba(246, 221, 229, 0.74), rgba(247, 236, 220, 0.68));
+.overview-card strong {
+  margin: 10px 0 6px;
+  font-size: 34px;
 }
 
-.overview-card.accent .overview-mark {
-  background: rgba(255, 255, 255, 0.74);
+.overview-card.accent {
+  background: linear-gradient(135deg, rgba(109, 140, 255, 0.9), rgba(131, 216, 234, 0.84));
+  color: #fff;
+}
+
+.overview-card.accent span,
+.overview-card.accent small {
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .category-bridge {
-  padding: 20px 22px;
+  padding: 18px 20px;
   border-radius: 28px;
-  background: rgba(255, 255, 255, 0.62);
-  border: 1px solid var(--border);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(247, 249, 255, 0.72)),
+    var(--surface);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   box-shadow: var(--shadow);
-  backdrop-filter: blur(22px) saturate(135%);
-}
-
-.category-bridge-head,
-.section-head,
-.pulse-row,
-.feature-meta,
-.feature-actions,
-.about-stats,
-.publishing-actions,
-.feed-topline,
-.feed-footer,
-.aside-row,
-.control-row {
-  display: flex;
-  flex-wrap: wrap;
 }
 
 .category-bridge-head {
+  display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
@@ -1089,93 +755,34 @@ onUnmounted(() => {
 }
 
 .bridge-title {
-  margin: 6px 0 0;
-  font-size: clamp(28px, 3.2vw, 34px);
-  color: #22304a;
+  margin: 8px 0 0;
+  font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", serif;
+  font-size: 26px;
+  letter-spacing: -0.02em;
 }
 
-.bridge-sub {
-  margin: 10px 0 0;
-  max-width: 620px;
-  font-size: 14px;
-  line-height: 1.75;
-  color: var(--text-soft);
-}
-
-.bridge-meta,
-.section-meta,
-.feed-date,
-.feed-views,
-.mini-item-date,
-.feature-meta,
-.outline-count {
-  color: var(--text-mute);
+.bridge-meta {
+  color: #7b86a6;
   font-size: 12px;
 }
 
-.category-pills,
-.tag-pills,
-.tag-cloud {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.category-pill,
-.tag-pill,
-.cloud-tag {
-  border: 1px solid rgba(219, 225, 236, 0.92);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.94);
-  cursor: pointer;
-  transition: background 0.22s ease, color 0.22s ease, border-color 0.22s ease, transform 0.22s ease;
-}
-
-.category-pill {
-  padding: 10px 16px;
-  color: var(--text-main);
-}
-
-.tag-pill,
-.cloud-tag {
-  padding: 8px 12px;
-  font-size: 13px;
-  color: var(--text-main);
-}
-
-.category-pill.active,
-.category-pill:hover,
-.tag-pill.active,
-.tag-pill:hover,
-.cloud-tag.active,
-.cloud-tag:hover {
-  background: linear-gradient(135deg, rgba(239, 170, 192, 0.96), rgba(158, 191, 223, 0.88));
-  color: #fff;
-  border-color: transparent;
-  transform: translateY(-1px);
-}
-
 .showcase-grid {
-  display: contents;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) 360px;
+  gap: 18px;
+  align-items: start;
 }
 
 .feature-stage {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 22px;
-  padding: 30px;
+  gap: 18px;
+  padding: 22px;
   border-radius: 32px;
   cursor: pointer;
   background:
-    radial-gradient(circle at 0% 0%, rgba(248, 231, 236, 0.36), transparent 24%),
-    radial-gradient(circle at 100% 0%, rgba(236, 241, 248, 0.34), transparent 24%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.74), rgba(251, 248, 246, 0.68));
-  transition: transform 0.26s ease, box-shadow 0.26s ease;
-}
-
-.feature-stage:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 24px 48px rgba(40, 52, 73, 0.12);
+    linear-gradient(145deg, rgba(255, 255, 255, 0.86), rgba(247, 249, 255, 0.7)),
+    var(--surface);
 }
 
 .feature-stage.empty {
@@ -1183,113 +790,46 @@ onUnmounted(() => {
   cursor: default;
 }
 
-.feature-copy,
-.feature-side {
-  display: flex;
-  flex-direction: column;
-}
-
-.feature-topline {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+.feature-title,
+.aside-title,
+.section-title,
+.publishing-title {
+  font-family: "Source Han Serif SC", "Noto Serif SC", "Songti SC", serif;
+  letter-spacing: -0.02em;
 }
 
 .feature-title {
-  margin: 14px 0 16px;
-  font-size: clamp(36px, 4vw, 50px);
-  line-height: 1.06;
-  font-weight: 800;
-  color: #22304a;
+  margin: 12px 0;
+  font-size: 42px;
+  line-height: 1.14;
 }
 
 .feature-summary,
 .aside-desc,
 .publishing-desc,
 .pulse-desc,
-.feed-summary,
-.feed-intro-card p,
-.feature-fallback p {
+.feed-summary {
   color: var(--text-soft);
-  line-height: 1.86;
+  line-height: 1.78;
 }
 
-.hero-badge,
-.feed-category,
-.feed-badge,
-.feed-tag,
-.pulse-badge,
-.outline-level,
-.cover-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.hero-badge {
-  padding: 6px 12px;
-  border: 1px solid rgba(231, 219, 223, 0.96);
-  background: rgba(255, 255, 255, 0.88);
-  color: #6f6070;
-}
-
-.hero-badge.primary {
-  background: linear-gradient(135deg, #f2bfd0, #f1d7b8);
-  color: #6b4860;
-}
-
-.hero-badge.muted {
-  color: #4b6e90;
-  border-color: rgba(206, 222, 240, 0.96);
-  background: rgba(244, 248, 252, 0.92);
+.feature-meta,
+.feature-actions,
+.about-stats,
+.publishing-actions,
+.feature-topline,
+.feed-topline,
+.feed-footer,
+.aside-row,
+.pulse-row {
+  display: flex;
+  flex-wrap: wrap;
 }
 
 .feature-meta {
-  gap: 10px 14px;
-  margin-bottom: 4px;
-}
-
-.feature-signal-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 22px;
-}
-
-.signal-card {
-  padding: 16px;
-  border-radius: 20px;
-  background: rgba(252, 250, 249, 0.62);
-  border: 1px solid rgba(233, 228, 231, 0.66);
-}
-
-.signal-label,
-.signal-hint {
-  display: block;
-}
-
-.signal-label {
+  gap: 10px;
   font-size: 12px;
-  color: #9a7a8b;
-}
-
-.signal-value {
-  display: block;
-  margin: 10px 0 6px;
-  font-size: 26px;
-  line-height: 1.1;
-  font-weight: 800;
-  color: #24324b;
-}
-
-.signal-hint {
-  font-size: 12px;
-  color: var(--text-mute);
-  line-height: 1.55;
+  color: #7b86a6;
 }
 
 .feature-actions {
@@ -1301,34 +841,22 @@ onUnmounted(() => {
   border: none;
   border-radius: 999px;
   padding: 10px 16px;
-  background: rgba(250, 251, 253, 0.96);
+  background: rgba(255, 255, 255, 0.74);
   color: var(--text-main);
   cursor: pointer;
   font-weight: 600;
-  transition: transform 0.22s ease, background 0.22s ease, box-shadow 0.22s ease;
-}
-
-.inline-action:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 24px rgba(40, 52, 73, 0.1);
 }
 
 .inline-action.primary {
-  background: linear-gradient(135deg, #f2bfd0, #f1d7b8);
-  color: #6b4860;
-}
-
-.feature-side {
-  gap: 16px;
+  background: linear-gradient(135deg, rgba(109, 140, 255, 0.16), rgba(255, 192, 214, 0.2));
+  color: #4964cf;
 }
 
 .feature-visual {
-  position: relative;
-  min-height: 320px;
+  min-height: 360px;
   border-radius: 28px;
   overflow: hidden;
-  background: linear-gradient(135deg, rgba(248, 233, 237, 0.68), rgba(245, 239, 229, 0.62) 44%, rgba(234, 241, 248, 0.64));
-  border: 1px solid rgba(233, 225, 229, 0.7);
+  background: linear-gradient(135deg, rgba(109, 140, 255, 0.14), rgba(255, 192, 214, 0.18));
 }
 
 .feature-cover {
@@ -1338,99 +866,29 @@ onUnmounted(() => {
 }
 
 .feature-fallback {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 26px;
-  color: #334156;
-}
-
-.cover-badge {
-  align-self: flex-start;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.78);
-  color: #5b6677;
-}
-
-.cover-mark {
-  font-size: clamp(72px, 10vw, 112px);
-  line-height: 1;
-  letter-spacing: -0.08em;
-  color: rgba(34, 48, 74, 0.78);
-}
-
-.feature-outline,
-.compact-card {
-  background: var(--surface-strong);
-}
-
-.feature-outline {
-  padding: 18px;
-  border-radius: 22px;
-  border: 1px solid rgba(233, 228, 231, 0.62);
-}
-
-.outline-head {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-  margin-bottom: 12px;
-}
-
-.feature-outline h3 {
-  margin: 0;
-  font-size: 22px;
-  color: #22304a;
-}
-
-.outline-item {
+  min-height: 360px;
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 10px;
-  margin-top: 10px;
-  padding: 10px 12px;
-  border-radius: 16px;
-  background: rgba(248, 246, 246, 0.96);
-  color: #5e6676;
+  place-items: center;
+  color: #6982d2;
+  font-size: 72px;
+  font-weight: 700;
 }
 
-.outline-level {
-  min-width: 34px;
-  height: 24px;
-  padding: 0 10px;
-  background: linear-gradient(135deg, rgba(242, 217, 226, 0.92), rgba(241, 233, 214, 0.92));
-  color: #6b4860;
-}
-
-.outline-text {
-  line-height: 1.55;
-}
-
-.blog-sidebar {
+.about-stack,
+.aside-column {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  align-self: start;
-}
-
-.blog-sidebar {
-  position: sticky;
-  top: 24px;
 }
 
 .aside-card {
   padding: 20px;
-  border-radius: 24px;
+  border-radius: 28px;
 }
 
 .aside-title {
   margin: 10px 0 12px;
   font-size: 24px;
-  color: #22304a;
 }
 
 .aside-title.small {
@@ -1447,16 +905,15 @@ onUnmounted(() => {
   flex: 1 1 calc(33.33% - 8px);
   min-width: 82px;
   padding: 14px 10px;
-  border-radius: 18px;
+  border-radius: 20px;
   text-align: center;
-  background: rgba(249, 248, 248, 0.64);
-  border: 1px solid rgba(233, 228, 231, 0.62);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--border);
 }
 
 .about-stat strong {
   display: block;
   font-size: 24px;
-  color: #24324b;
 }
 
 .about-stat span {
@@ -1468,15 +925,16 @@ onUnmounted(() => {
   margin-top: 18px;
   padding: 18px;
   border-radius: 22px;
-  background: linear-gradient(135deg, rgba(247, 239, 242, 0.68), rgba(247, 243, 237, 0.62));
-  border: 1px solid rgba(233, 228, 231, 0.62);
+  background:
+    linear-gradient(135deg, rgba(109, 140, 255, 0.08), rgba(255, 192, 214, 0.12)),
+    rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(169, 185, 255, 0.16);
 }
 
 .publishing-title {
   margin: 8px 0 10px;
   font-size: 22px;
   line-height: 1.35;
-  color: #22304a;
 }
 
 .publishing-actions {
@@ -1485,7 +943,9 @@ onUnmounted(() => {
 }
 
 .pulse-card {
-  background: linear-gradient(135deg, rgba(247, 239, 242, 0.66), rgba(240, 245, 251, 0.64));
+  background:
+    linear-gradient(135deg, rgba(109, 140, 255, 0.1), rgba(131, 216, 234, 0.1)),
+    var(--surface);
 }
 
 .pulse-row {
@@ -1497,75 +957,108 @@ onUnmounted(() => {
 .pulse-title {
   margin: 8px 0;
   font-size: 24px;
-  color: #22304a;
 }
 
 .pulse-badge {
+  display: inline-flex;
+  align-items: center;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.58);
-  color: #61708a;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #6476b5;
+  font-size: 12px;
   white-space: nowrap;
 }
 
 .control-panel {
-  padding: 16px 18px;
-  border-radius: 24px;
+  padding: 18px 20px;
+  border-radius: 28px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
 }
 
-.embedded-control-panel {
-  margin: -2px 0 18px;
-  padding: 0 0 18px;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  border-bottom: 1px solid rgba(233, 228, 231, 0.62);
+.control-row,
+.category-pills,
+.tag-pills,
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .control-row {
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
 }
 
-.control-sub {
-  margin: 6px 0 0;
-  color: var(--text-soft);
-  line-height: 1.7;
+.category-pill,
+.tag-pill,
+.cloud-tag {
+  border: 1px solid rgba(169, 185, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  transition: 0.24s ease;
+}
+
+.category-pill {
+  padding: 10px 14px;
+}
+
+.tag-pill,
+.cloud-tag {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.category-pill.active,
+.category-pill:hover,
+.tag-pill.active,
+.tag-pill:hover,
+.cloud-tag.active,
+.cloud-tag:hover {
+  background: linear-gradient(135deg, rgba(109, 140, 255, 0.92), rgba(131, 216, 234, 0.82));
+  color: #fff;
+  border-color: transparent;
 }
 
 .tiny-action {
   border: none;
   background: none;
-  color: #c7809b;
+  color: #e188aa;
   cursor: pointer;
-  padding: 0;
 }
 
 .content-layout {
-  display: contents;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 20px;
 }
 
 .feed-column {
   padding: 20px;
-  border-radius: 26px;
+  border-radius: 28px;
 }
 
 .section-head {
+  display: flex;
   justify-content: space-between;
   align-items: flex-end;
   gap: 16px;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .section-title {
   margin: 8px 0 0;
-  font-size: clamp(28px, 3vw, 34px);
-  color: #22304a;
+  font-size: 30px;
+}
+
+.section-meta,
+.feed-date,
+.feed-views,
+.mini-item-date {
+  color: #7b86a6;
+  font-size: 12px;
 }
 
 .section-meta {
@@ -1574,50 +1067,30 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
-.feed-intro-card {
-  margin-bottom: 12px;
-  padding: 16px 18px;
-  border-radius: 22px;
-  background: linear-gradient(135deg, rgba(249, 247, 246, 0.64), rgba(244, 248, 252, 0.62));
-}
-
-.feed-intro-card h3 {
-  margin: 6px 0 8px;
-  font-size: 22px;
-  color: #22304a;
-}
-
 .feed-card {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
   gap: 18px;
   padding: 18px;
-  border-radius: 22px;
+  border-radius: 24px;
   margin-bottom: 16px;
   background: var(--surface-strong);
-  border: 1px solid rgba(233, 228, 231, 0.62);
+  border: 1px solid rgba(169, 185, 255, 0.14);
   cursor: pointer;
-  transition: transform 0.24s ease, box-shadow 0.24s ease;
-}
-
-.feed-card:hover,
-.mini-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 30px rgba(40, 52, 73, 0.08);
 }
 
 .feed-cover-box {
   min-height: 170px;
-  border-radius: 20px;
+  border-radius: 22px;
   overflow: hidden;
-  background: linear-gradient(135deg, rgba(246, 231, 236, 0.64), rgba(244, 239, 232, 0.6) 44%, rgba(232, 241, 248, 0.62));
+  background: linear-gradient(135deg, rgba(109, 140, 255, 0.14), rgba(255, 192, 214, 0.16));
 }
 
 .feed-cover-box.fallback {
   display: grid;
   place-items: center;
   font-size: 46px;
-  color: #5f6473;
+  color: #7283d8;
   font-weight: 700;
 }
 
@@ -1633,22 +1106,24 @@ onUnmounted(() => {
   margin-bottom: 10px;
 }
 
-.feed-category {
+.feed-category,
+.feed-badge,
+.feed-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
   padding: 4px 10px;
-  background: rgba(246, 232, 237, 0.96);
-  color: #6b4860;
+  font-size: 12px;
+}
+
+.feed-category {
+  background: rgba(109, 140, 255, 0.08);
+  color: #5f78d7;
 }
 
 .feed-badge {
-  padding: 4px 10px;
-  background: rgba(226, 233, 243, 0.94);
-  color: #5c7392;
-}
-
-.feed-tag {
-  padding: 4px 10px;
-  background: rgba(239, 243, 248, 0.96);
-  color: #4f657f;
+  background: rgba(255, 192, 214, 0.16);
+  color: #d97198;
 }
 
 .feed-date {
@@ -1658,8 +1133,6 @@ onUnmounted(() => {
 .feed-title {
   margin: 0 0 10px;
   font-size: 24px;
-  line-height: 1.3;
-  color: #22304a;
 }
 
 .feed-footer {
@@ -1675,33 +1148,29 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+.feed-tag {
+  background: rgba(131, 216, 234, 0.12);
+  color: #4c87a0;
+}
+
 .mini-list {
   flex-direction: column;
 }
 
 .mini-item {
-  border: 1px solid rgba(233, 228, 231, 0.62);
-  background: rgba(255, 255, 255, 0.6);
-  border-radius: 16px;
+  border: 1px solid rgba(169, 185, 255, 0.12);
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 18px;
   padding: 12px 14px;
   display: flex;
   justify-content: space-between;
   gap: 12px;
   cursor: pointer;
   text-align: left;
-  transition: transform 0.22s ease, box-shadow 0.22s ease;
-}
-
-.mini-item.compact {
-  padding-block: 11px;
 }
 
 .mini-item-title {
   color: var(--text-main);
-}
-
-.cloud-tag {
-  border: 1px solid rgba(233, 228, 231, 0.88);
 }
 
 .empty-state {
@@ -1714,12 +1183,12 @@ onUnmounted(() => {
   width: 80px;
   height: 80px;
   margin: 0 auto 14px;
-  border-radius: 24px;
+  border-radius: 26px;
   display: grid;
   place-items: center;
   font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace;
-  background: linear-gradient(135deg, rgba(242, 217, 226, 0.92), rgba(231, 239, 247, 0.92));
-  color: #5f6473;
+  background: linear-gradient(135deg, rgba(109, 140, 255, 0.16), rgba(255, 192, 214, 0.18));
+  color: #5d78db;
   font-weight: 700;
 }
 
@@ -1744,27 +1213,20 @@ onUnmounted(() => {
 }
 
 @media (max-width: 1120px) {
-  .blog-home,
-  .feature-stage,
-  .feature-signal-grid {
+  .overview-strip,
+  .showcase-grid,
+  .content-layout {
     grid-template-columns: 1fr;
   }
 
-  .feature-stage,
-  .feed-column,
-  .blog-sidebar {
-    grid-column: 1;
+  .feature-stage {
+    grid-template-columns: 1fr;
   }
 
-  .overview-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .feature-visual {
+    min-height: 280px;
   }
 
-  .blog-sidebar {
-    position: static;
-  }
-
-  .feature-visual,
   .feature-fallback {
     min-height: 280px;
   }
@@ -1772,21 +1234,15 @@ onUnmounted(() => {
 
 @media (max-width: 760px) {
   .blog-home {
-    padding: 16px 14px 36px;
+    padding: 12px;
   }
 
   .topbar,
-  .overview-strip,
   .category-bridge-head,
   .section-head,
-  .pulse-row,
-  .control-row {
+  .pulse-row {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .topbar {
-    padding: 22px 20px;
   }
 
   .search-input {
@@ -1803,10 +1259,6 @@ onUnmounted(() => {
 
   .feed-date {
     margin-left: 0;
-  }
-
-  .overview-strip {
-    grid-template-columns: 1fr;
   }
 }
 </style>

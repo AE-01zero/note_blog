@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { getUserInfo } from '@/api'
+import { useAiSecurityStore } from './aiSecurity'
 
 const DEFAULT_ADMIN_PHONE = '13800000000'
 
@@ -99,3 +100,6 @@ export const useNotebookStore = defineStore('notebook', {
     }
   }
 })
+
+// 导出AI安全分析Store
+export { useAiSecurityStore }

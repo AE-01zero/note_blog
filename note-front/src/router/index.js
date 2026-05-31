@@ -24,6 +24,12 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/ai-security',
+    name: 'AiSecurity',
+    component: () => import('@/views/AiSecurityView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/blog',
     name: 'BlogHome',
     component: () => import('@/views/BlogHome.vue')

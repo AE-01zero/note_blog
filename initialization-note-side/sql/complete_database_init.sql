@@ -207,8 +207,7 @@ create table if not exists public.t_file_info
     file_hash         varchar(64),
     source_type       smallint  default 1,
     source_note_id    bigint,
-    source_note_title varchar(255),
-    category          varchar(64)
+    source_note_title varchar(255)
     );
 
 comment on table public.t_file_info is '文件上传信息表';
@@ -241,16 +240,8 @@ comment on column public.t_file_info.mime_type is '文件的MIME类型';
 
 comment on column public.t_file_info.file_hash is '文件的哈希值（如SHA-256），用于校验完整性';
 
-comment on column public.t_file_info.category is '知识库分类';
-
 alter table public.t_file_info
     owner to postgres;
-
-create index if not exists idx_file_info_category
-    on public.t_file_info (category);
-
-create index if not exists idx_file_info_user_category
-    on public.t_file_info (user_id, category);
 
 -- =====================
 -- 博客分类表

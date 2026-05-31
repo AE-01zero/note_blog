@@ -1,0 +1,83 @@
+/* ===== AI 安全分析模块 — 亮色主题变量 ===== */
+:root {
+  --ai-identity-bg: linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);
+  --ai-identity-border: #e2e8f0;
+  --ai-identity-accent-apk: #3b82f6;
+  --ai-identity-accent-so: #f59e0b;
+  --ai-identity-accent-protocol: #8b5cf6;
+  --ai-identity-accent-sandbox: #ef4444;
+  --ai-identity-accent-file: #10b981;
+  --ai-identity-accent-global: #6366f1;
+
+  --ai-thinking-bg: rgba(139, 92, 246, 0.04);
+  --ai-thinking-border: rgba(139, 92, 246, 0.15);
+  --ai-thinking-accent: #7c3aed;
+  --ai-thinking-text: #5b21b6;
+  --ai-thinking-header-bg: rgba(139, 92, 246, 0.06);
+
+  --ai-probe-bg: rgba(249, 115, 22, 0.04);
+  --ai-probe-border: rgba(249, 115, 22, 0.2);
+  --ai-probe-accent: #ea580c;
+
+  --ai-report-body-bg: #ffffff;
+  --ai-report-body-text: #334155;
+
+  --ai-step-card-bg: #f8fafc;
+  --ai-step-card-border: #e2e8f0;
+}
+
+/* ===== 暗色主题变量 ===== */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ai-identity-bg: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+    --ai-identity-border: #334155;
+
+    --ai-thinking-bg: rgba(139, 92, 246, 0.08);
+    --ai-thinking-border: rgba(139, 92, 246, 0.2);
+    --ai-thinking-text: #c4b5fd;
+    --ai-thinking-header-bg: rgba(139, 92, 246, 0.12);
+
+    --ai-probe-bg: rgba(249, 115, 22, 0.08);
+    --ai-probe-border: rgba(249, 115, 22, 0.25);
+
+    --ai-report-body-bg: #1e293b;
+    --ai-report-body-text: #cbd5e1;
+
+    --ai-step-card-bg: #1e293b;
+    --ai-step-card-border: #334155;
+  }
+}
+
+/* ===== 关键帧动画 ===== */
+@keyframes ai-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.05); }
+}
+
+@keyframes brain-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(139, 92, 246, 0.5)); }
+  50% { filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.8)); }
+}
+
+@keyframes typing-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.ai-loading-pulse {
+  animation: ai-pulse 2s infinite ease-in-out;
+}
+
+.brain-glow-icon {
+  animation: brain-glow 2s infinite ease-in-out;
+}
+
+.typing-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background: var(--ai-thinking-accent, #7c3aed);
+  animation: typing-blink 1s infinite;
+  vertical-align: text-bottom;
+  margin-left: 2px;
+}

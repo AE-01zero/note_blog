@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="document-manager">
     <div class="document-header">
       <h3>个人知识库</h3>
@@ -21,9 +21,9 @@
             @change="searchDocuments"
         >
           <el-option label="PDF" value="pdf" />
-          <el-option label="Word" value="doc" />
-          <el-option label="Markdown" value="md" />
+          <el-option label="Word" value="docx" />
           <el-option label="文本" value="txt" />
+          <el-option label="Markdown" value="md" />
         </el-select>
 
         <el-select
@@ -61,15 +61,53 @@
 
         <el-upload
             ref="uploadRef"
-            :show-file-list="false"
+            :action="uploadUrl"
+            :headers="uploadHeaders"
+            :data="{ category: uploadCategory }"
+            :show-file-list="true"
+            :file-list="uploadFileList"
+            :multiple="true"
+            :drag="true"
             :before-upload="beforeUpload"
-            :http-request="handleDocumentUpload"
-            accept=".pdf,.doc,.docx,.txt,.md"
+            :on-success="handleUploadSuccess"
+            :on-error="handleUploadError"
+            :on-progress="handleUploadProgress"
+            :on-change="handleFileChange"
+            :on-remove="handleFileRemove"
+            :auto-upload="false"
+            accept=".pdf,.docx,.txt,.md,.doc"
         >
           <el-button type="primary" size="default" class="upload-btn">
             <el-icon><Upload /></el-icon>
-            上传文档
+            选择文档
           </el-button>
+          <template #tip>
+            <div class="upload-tip">支持 .pdf .docx .doc .txt .md，可多选，拖拽上传</div>
+          </template>
+          <template #file="{ file }">
+            <div class="upload-file-item">
+              <span class="file-item-name">
+                <el-icon><Document /></el-icon>
+                {{ file.name }}
+              </span>
+              <span class="file-item-size">{{ formatUploadFileSize(file.size) }}</span>
+              <el-progress
+                v-if="file.status === 'uploading'"
+                :percentage="file.percentage || 0"
+                :stroke-width="6"
+                :show-text="false"
+                style="width: 100px"
+              />
+              <el-tag v-else-if="file.status === 'success'" type="success" size="small">完成</el-tag>
+              <el-tag v-else-if="file.status === 'fail'" type="danger" size="small">失败</el-tag>
+            </div>
+          </template>
+          <div class="upload-actions" v-if="uploadFileList.length > 0">
+            <el-button type="success" size="small" @click="submitUpload" :loading="uploading">
+              开始上传 ({{ uploadFileList.filter(f => f.status !== 'success').length }})
+            </el-button>
+            <el-button size="small" @click="clearUploadList">清空列表</el-button>
+          </div>
         </el-upload>
       </div>
     </div>
@@ -103,8 +141,9 @@
                 <div class="file-icon">
                   <el-icon size="32" :color="getFileTypeColor(doc.fileType)">
                     <Document v-if="doc.fileType === 'pdf'" />
-                    <Edit v-else-if="doc.fileType === 'doc' || doc.fileType === 'docx'" />
-                    <Memo v-else />
+                    <Edit v-else-if="doc.fileType === 'docx' || doc.fileType === 'doc'" />
+                    <Memo v-else-if="doc.fileType === 'md'" />
+                    <Tickets v-else />
                   </el-icon>
                 </div>
                 <div class="file-type-tag">
@@ -194,24 +233,7 @@
         destroy-on-close
         @closed="resetPreviewDialog"
     >
-      <div class="preview-content" :class="{ 'text-preview-shell': previewDialog.fileType === 'txt' || previewDialog.fileType === 'md' }">
-        <div
-            v-if="previewDialog.fileType === 'txt' || previewDialog.fileType === 'md'"
-            class="preview-meta-bar"
-        >
-          <div class="preview-meta-main">
-            <div class="preview-meta-title">{{ previewDialog.metadata?.fileName }}</div>
-            <div class="preview-meta-subtitle">
-              <span>{{ previewDialog.metadata?.typeLabel }}</span>
-              <span>{{ previewDialog.metadata?.fileSize }}</span>
-              <span>{{ previewDialog.metadata?.updateTime }}</span>
-            </div>
-          </div>
-          <div class="preview-meta-tags">
-            <el-tag size="small" round>{{ previewDialog.metadata?.sourceLabel }}</el-tag>
-            <el-tag size="small" round type="warning">{{ previewDialog.metadata?.category }}</el-tag>
-          </div>
-        </div>
+      <div class="preview-content">
         <!-- PDF -->
         <iframe
             v-if="previewDialog.fileType === 'pdf'"
@@ -221,13 +243,13 @@
         <!-- TXT -->
         <pre
             v-else-if="previewDialog.fileType === 'txt'"
-            class="doc-text-preview"
-        >{{ previewDialog.textContent || '暂无文本内容' }}</pre>
+            style="width: 100%; min-height: 70vh; margin: 0; padding: 16px; box-sizing: border-box; white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.7; color: #303133; background: #fff;"
+        >{{ previewDialog.textContent }}</pre>
         <!-- MD -->
         <div
             v-else-if="previewDialog.fileType === 'md'"
             class="doc-markdown-preview"
-            v-html="previewDialog.markdownContent || '<p>暂无 Markdown 内容</p>'"
+            v-html="previewDialog.markdownContent"
         />
         <!-- 兜底 -->
         <div v-else class="preview-placeholder">
@@ -254,35 +276,22 @@
         <el-button type="primary" @click="saveCategory">保存</el-button>
       </template>
     </el-dialog>
-
-    <UploadTaskPanel :tasks="uploadTasks" title="文档上传进度" />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useUserStore } from '@/store'
-import { getDocumentList, deleteDocument as deleteDocumentApi, uploadDocument } from '@/api'
+import { getDocumentList, deleteDocument as deleteDocumentApi } from '@/api'
 import { getMyCategories, createCategory } from '@/api/blog'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import UploadTaskPanel from '@/components/UploadTaskPanel.vue'
-import {
-  MAX_UPLOAD_SIZE_MB,
-  createUploadTask,
-  updateUploadTaskProgress,
-  markUploadTaskSuccess,
-  markUploadTaskError,
-  scheduleUploadTaskCleanup
-} from '@/utils/uploadProgress'
 // 导入 Refresh 图标
-import { Document, Edit, Memo, Upload, Search, Refresh, ArrowDown, ArrowRight } from '@element-plus/icons-vue'
-
-const SUPPORTED_UPLOAD_EXTENSIONS = ['pdf', 'doc', 'docx', 'txt', 'md']
-const SUPPORTED_UPLOAD_LABEL = 'PDF、Word、Markdown、文本文件'
+import { Document, Edit, Memo, Tickets, Upload, Search, Refresh, ArrowDown, ArrowRight } from '@element-plus/icons-vue'
 
 const userStore = useUserStore()
 
+// 分类列表
 const categoryOptions = ref([])
 
 const loadCategories = async () => {
@@ -298,8 +307,11 @@ const loadCategories = async () => {
 const documents = ref([])
 const loading = ref(false)
 const uploadCategory = ref('')
-const uploadTasks = ref([])
 const categoryExpandState = ref({})
+const uploadUrl = ref('/api/documents/upload')
+const uploadHeaders = ref({
+  'Authorization': `Bearer ${userStore.token}`
+})
 
 const groupedDocuments = computed(() => {
   const grouped = new Map()
@@ -365,8 +377,7 @@ const previewDialog = reactive({
   fileUrl: '',
   fileType: '',
   textContent: '',
-  markdownContent: '',
-  metadata: null
+  markdownContent: ''
 })
 
 const resetPreviewDialog = () => {
@@ -375,17 +386,7 @@ const resetPreviewDialog = () => {
   previewDialog.fileType = ''
   previewDialog.textContent = ''
   previewDialog.markdownContent = ''
-  previewDialog.metadata = null
 }
-
-const buildPreviewMetadata = (doc) => ({
-  fileName: doc.originalFilename || doc.fileName || '未命名文件',
-  category: doc.category || '未分类',
-  fileSize: formatFileSize(null, null, doc.fileSize || 0),
-  sourceLabel: doc.processingStatus === 'SUCCESS' ? '个人知识库 · 已处理' : '个人知识库 · 处理中',
-  updateTime: formatTime(null, null, doc.updateTime || doc.createTime),
-  typeLabel: getFileTypeLabel(doc.mimeType || doc.fileType || '')
-})
 
 // 获取文档列表
 const loadDocuments = async () => {
@@ -467,39 +468,59 @@ const searchDocuments = () => {
   loadDocuments()
 }
 
-const pushUploadTask = (file) => {
-  const task = createUploadTask(file, { name: `文档上传 · ${file.name}` })
-  uploadTasks.value.unshift(task)
-  if (uploadTasks.value.length > 8) {
-    uploadTasks.value = uploadTasks.value.slice(0, 8)
-  }
-  return task
-}
-
-const finishUploadTask = (task, error) => {
-  if (!task) return
-
-  if (error) {
-    markUploadTaskError(task, error)
-    scheduleUploadTaskCleanup(uploadTasks, task.id, 5000)
-    return
-  }
-
-  markUploadTaskSuccess(task)
-  scheduleUploadTaskCleanup(uploadTasks, task.id)
-}
-
 // 上传前：若分类是新建输入的则先创建
+const uploadFileList = ref([])
+const uploading = ref(false)
+
+// 文件列表变化
+const handleFileChange = (file, fileList) => {
+  uploadFileList.value = fileList
+}
+
+// 移除文件
+const handleFileRemove = (file, fileList) => {
+  uploadFileList.value = fileList
+}
+
+// 清空上传列表
+const clearUploadList = () => {
+  uploadFileList.value = []
+}
+
+// 格式化上传文件大小
+const formatUploadFileSize = (bytes) => {
+  if (!bytes || bytes === 0) return '0 B'
+  const k = 1024
+  const sizes = ['B', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
+}
+
+// 上传前验证
 const beforeUpload = async (file) => {
-  const extension = (file.name.split('.').pop() || '').toLowerCase()
-  if (!SUPPORTED_UPLOAD_EXTENSIONS.includes(extension)) {
-    ElMessage.error(`只支持 ${SUPPORTED_UPLOAD_LABEL}`)
+  const allowedTypes = [
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword',
+    'text/plain',
+    'text/markdown',
+    'text/x-markdown'
+  ]
+  // MD文件可能被识别为 text/plain 或空MIME，允许通过扩展名判断
+  const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+  const allowedExts = ['.pdf', '.docx', '.doc', '.txt', '.md']
+  const isAllowedExt = allowedExts.includes(ext)
+
+  if (!allowedTypes.includes(file.type) && !isAllowedExt) {
+    ElMessage.error(`不支持的文件类型 (${file.type || '未知'})。支持: PDF、Word、TXT、Markdown`)
     return false
   }
-  if (file.size / 1024 / 1024 > MAX_UPLOAD_SIZE_MB) {
-    ElMessage.error(`文件大小不能超过 ${MAX_UPLOAD_SIZE_MB}MB`)
+
+  if (file.size / 1024 / 1024 >= 100) {
+    ElMessage.error('文件大小不能超过 100MB!')
     return false
   }
+
   // 若分类是新输入的（不在现有列表中），先创建
   const cat = uploadCategory.value
   if (cat && !categoryOptions.value.find(c => c.name === cat)) {
@@ -512,23 +533,55 @@ const beforeUpload = async (file) => {
   return true
 }
 
-const handleDocumentUpload = async (options) => {
-  const file = options.file
-  const uploadTask = pushUploadTask(file)
+// 上传进度回调
+const handleUploadProgress = (event, file, fileList) => {
+  uploadFileList.value = fileList
+}
 
-  try {
-    const response = await uploadDocument(file, uploadCategory.value || undefined, {
-      onUploadProgress: (progressEvent) => updateUploadTaskProgress(uploadTask, progressEvent)
-    })
-    finishUploadTask(uploadTask)
-    options.onSuccess?.(response.data, file)
-    ElMessage.success('文档上传成功')
-    await loadDocuments()
-  } catch (error) {
-    console.error('上传失败:', error)
-    finishUploadTask(uploadTask, error)
-    options.onError?.(error)
-    ElMessage.error('上传失败')
+// 手动触发上传
+const submitUpload = () => {
+  if (uploadFileList.value.length === 0) {
+    ElMessage.warning('请先选择文件')
+    return
+  }
+  uploading.value = true
+  uploadRef.value.submit()
+}
+
+// 上传成功
+const handleUploadSuccess = (response, file, fileList) => {
+  if (response) {
+    if (response.code === 0 || response.code === undefined) {
+      // 单个文件上传成功
+    }
+    else if (response.successCount !== undefined) {
+      // 多文件批量结果
+    }
+  }
+  // 所有文件上传完成后刷新
+  const allDone = fileList.every(f => f.status === 'success' || f.status === 'fail')
+  if (allDone) {
+    uploading.value = false
+    const successCount = fileList.filter(f => f.status === 'success').length
+    const failCount = fileList.filter(f => f.status === 'fail').length
+    if (failCount > 0) {
+      ElMessage.warning(`上传完成: ${successCount} 成功, ${failCount} 失败`)
+    } else {
+      ElMessage.success(`${successCount} 个文件全部上传成功`)
+    }
+    loadDocuments()
+    // 延迟清空列表
+    setTimeout(() => { uploadFileList.value = [] }, 2000)
+  }
+}
+
+// 上传失败
+const handleUploadError = (error, file, fileList) => {
+  console.error('上传失败:', file.name, error)
+  const allDone = fileList.every(f => f.status === 'success' || f.status === 'fail')
+  if (allDone) {
+    uploading.value = false
+    loadDocuments()
   }
 }
 
@@ -620,7 +673,6 @@ const previewDocument = async (row) => {
   previewDialog.fileType = ''
   previewDialog.textContent = ''
   previewDialog.markdownContent = ''
-  previewDialog.metadata = buildPreviewMetadata(row)
 
   try {
     if (ext === 'pdf') {
@@ -707,6 +759,7 @@ const getFileTypeTagColor = (fileType) => {
     'pdf': 'danger',
     'docx': 'primary',
     'txt': 'info',
+    'md': 'success',
     'other': 'info'
   }
   return colorMap[fileType] || 'info'
@@ -718,6 +771,7 @@ const getFileTypeLabel = (fileType) => {
     'application/pdf': 'PDF',
     'application/docx': 'WORD',
     'text/plain': '文本',
+    'text/markdown': 'MD',
     'other': '其他'
   }
   return labelMap[fileType] || '其他'
@@ -729,6 +783,7 @@ const getFileTypeColor = (fileType) => {
     'pdf': '#f56565',
     'docx': '#4299e1',
     'txt': '#48bb78',
+    'md': '#38b2ac',
     'other': '#9f7aea'
   }
   return colorMap[fileType] || '#9f7aea'
@@ -847,6 +902,49 @@ onMounted(() => {
 
 .upload-btn:hover {
   box-shadow: 0 4px 8px rgba(64, 153, 255, 0.3);
+}
+
+.upload-tip {
+  color: #909399;
+  font-size: 12px;
+  margin-top: 8px;
+}
+
+/* 上传文件列表项 */
+.upload-file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+
+.file-item-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-item-size {
+  font-size: 12px;
+  color: #909399;
+  white-space: nowrap;
+}
+
+/* 上传操作按钮行 */
+.upload-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.document-manager :deep(.el-upload-dragger) {
+  padding: 20px;
 }
 
 .document-content {
@@ -1010,104 +1108,17 @@ onMounted(() => {
 }
 
 .preview-content {
-  border-radius: 16px;
+  border-radius: 8px;
   overflow: hidden;
-  background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
 }
 
-.text-preview-shell {
-  min-height: 70vh;
+.preview-placeholder {
+  height: 500px;
   display: flex;
-  flex-direction: column;
-}
-
-.preview-meta-bar {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 18px 20px;
-  border-bottom: 1px solid rgba(99, 102, 241, 0.12);
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(16px);
-}
-
-.preview-meta-main {
-  min-width: 0;
-}
-
-.preview-meta-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #1e293b;
-  line-height: 1.4;
-}
-
-.preview-meta-subtitle {
-  margin-top: 6px;
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: #64748b;
-}
-
-.preview-meta-tags {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: flex-end;
-}
-
-.doc-text-preview,
-.doc-markdown-preview {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: calc(70vh - 78px);
-  margin: 0;
-  padding: 28px 32px;
-  color: #334155;
-  background: rgba(255, 255, 255, 0.96);
-  line-height: 1.9;
-  overflow: auto;
-  max-width: 980px;
-  align-self: center;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: break-word;
-}
-
-.doc-text-preview {
-  font-size: 15px;
-  font-family: "JetBrains Mono", "Consolas", "Microsoft YaHei", monospace;
-}
-
-.doc-markdown-preview :deep(h1),
-.doc-markdown-preview :deep(h2),
-.doc-markdown-preview :deep(h3),
-.doc-markdown-preview :deep(h4) {
-  color: #0f172a;
-  line-height: 1.35;
-  margin-top: 1.6em;
-  margin-bottom: 0.7em;
-}
-
-.doc-markdown-preview :deep(p),
-.doc-markdown-preview :deep(li),
-.doc-markdown-preview :deep(blockquote) {
-  font-size: 15px;
-}
-
-.doc-markdown-preview :deep(table) {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 16px 0;
-}
-
-.doc-markdown-preview :deep(th),
-.doc-markdown-preview :deep(td) {
-  border: 1px solid #e2e8f0;
-  padding: 10px 12px;
+  justify-content: center;
+  align-items: center;
+  background: #f5f7fa;
+  border-radius: 8px;
 }
 
 /* 响应式设计 */
@@ -1151,28 +1162,177 @@ onMounted(() => {
   box-sizing: border-box;
   width: 100%;
   min-height: 70vh;
-  padding: 16px;
-  color: #303133;
+  padding: 32px;
+  color: #1e293b;
   background: #fff;
   line-height: 1.8;
   word-break: break-word;
   overflow-wrap: break-word;
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 15px;
+}
+
+.doc-markdown-preview :deep(h1),
+.doc-markdown-preview :deep(h2),
+.doc-markdown-preview :deep(h3),
+.doc-markdown-preview :deep(h4),
+.doc-markdown-preview :deep(h5),
+.doc-markdown-preview :deep(h6) {
+  color: #0f172a;
+  font-family: 'Outfit', 'Inter', sans-serif;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-top: 28px;
+  margin-bottom: 16px;
+}
+
+.doc-markdown-preview :deep(h1) {
+  font-size: 2.2em;
+  border-bottom: 2px solid #f1f5f9;
+  padding-bottom: 10px;
+  margin-top: 10px;
+}
+
+.doc-markdown-preview :deep(h2) {
+  font-size: 1.65em;
+  position: relative;
+  padding-left: 14px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 8px;
+}
+
+.doc-markdown-preview :deep(h2)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 12px;
+  width: 4px;
+  background: linear-gradient(to bottom, #8b5cf6, #3b82f6);
+  border-radius: 2px;
+}
+
+.doc-markdown-preview :deep(h3) {
+  font-size: 1.35em;
+}
+
+.doc-markdown-preview :deep(p) {
+  margin-top: 0;
+  margin-bottom: 18px;
+  color: #334155;
+}
+
+.doc-markdown-preview :deep(a) {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 500;
+  border-bottom: 1px dashed rgba(59, 130, 246, 0.4);
+  transition: all 0.2s ease;
+}
+
+.doc-markdown-preview :deep(a:hover) {
+  color: #2563eb;
+  border-bottom-style: solid;
+}
+
+.doc-markdown-preview :deep(blockquote) {
+  margin: 20px 0;
+  padding: 14px 22px;
+  background: rgba(139, 92, 246, 0.035);
+  border-left: 4px solid #8b5cf6;
+  border-radius: 0 12px 12px 0;
+  color: #475569;
+  font-style: italic;
+}
+
+.doc-markdown-preview :deep(blockquote p) {
+  margin: 0;
+}
+
+.doc-markdown-preview :deep(ul),
+.doc-markdown-preview :deep(ol) {
+  padding-left: 24px;
+  margin-bottom: 18px;
+  color: #334155;
+}
+
+.doc-markdown-preview :deep(li) {
+  margin-bottom: 8px;
 }
 
 .doc-markdown-preview :deep(pre) {
-  padding: 12px;
+  margin: 24px 0;
+  padding: 16px 20px;
+  background: #1e1e2e;
+  border-radius: 12px;
   overflow: auto;
-  background: #f5f7fa;
-  border-radius: 6px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(139, 92, 246, 0.1);
+}
+
+.doc-markdown-preview :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: #cdd6f4;
+  border-radius: 0;
+  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .doc-markdown-preview :deep(code) {
-  padding: 2px 4px;
-  background: #f5f7fa;
-  border-radius: 4px;
+  padding: 3px 6px;
+  background: rgba(139, 92, 246, 0.08);
+  color: #6d28d9;
+  border-radius: 6px;
+  font-family: 'Fira Code', 'Consolas', 'Monaco', monospace;
+  font-size: 0.9em;
+}
+
+.doc-markdown-preview :deep(table) {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 28px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+}
+
+.doc-markdown-preview :deep(th) {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.05) 0%, rgba(59, 130, 246, 0.05) 100%);
+  color: #1e293b;
+  font-weight: 600;
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.doc-markdown-preview :deep(td) {
+  padding: 12px 16px;
+  color: #334155;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.doc-markdown-preview :deep(tr:last-child td) {
+  border-bottom: none;
+}
+
+.doc-markdown-preview :deep(tr:nth-child(even)) {
+  background-color: #f8fafc;
+}
+
+.doc-markdown-preview :deep(hr) {
+  height: 1px;
+  border: none;
+  background: linear-gradient(to right, rgba(139, 92, 246, 0.08), rgba(59, 130, 246, 0.25), rgba(139, 92, 246, 0.08));
+  margin: 32px 0;
 }
 
 .doc-markdown-preview :deep(img) {
   max-width: 100%;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 </style>
