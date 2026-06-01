@@ -405,18 +405,18 @@ docker compose up --build -d
 
 ### AI安全分析-APK分析
 
-![博客管理](file://D:\program\java_all\note_dev\imges_example\9.png?lastModify=1780214562)
+![博客管理](imges_example/9.png)
 
 ### AI安全分析-APK逆向
 
-![博客管理](file://D:\program\java_all\note_dev\imges_example\10.png?lastModify=1780214562)
+![博客管理](imges_example/10.png)
 
 ### AI安全分析-SO分析
 
-![博客管理](file://D:\program\java_all\note_dev\imges_example\11.png?lastModify=1780214562)
+![博客管理](imges_example/11.png)
 
 ### AI安全分析-协议分析
 
-![博客管理](file://D:\program\java_all\note_dev\imges_example\12.png?lastModify=1780214562)
+![博客管理](imges_example/12.png)
 
 </details>
