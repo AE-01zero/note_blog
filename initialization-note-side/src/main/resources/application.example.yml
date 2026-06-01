@@ -1,0 +1,104 @@
+server:
+  port: 8889
+
+spring:
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5434}/${DB_NAME:note_blog}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:git_upload_db_password}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 1
+    table: flyway_schema_history
+  data:
+    redis:
+      database: 2
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:git_upload_redis_password}
+      connect-timeout: 100s
+      lettuce:
+        pool:
+          max-active: 200
+          max-wait: -1ms
+          max-idle: 10
+          min-idle: 0
+  mvc:
+    async:
+      request-timeout: 30000
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+
+sa-token:
+  token-name: Authorization
+  token-prefix: Bearer
+  jwt-secret-key: ${JWT_SECRET:git_upload_jwt_secret}
+  timeout: 12592000
+  is-concurrent: false
+
+dromara:
+  x-file-storage:
+    default-platform: local-plus
+    local-plus:
+      - platform: local-plus
+        enable-storage: true
+        enable-access: true
+        domain: ${FILE_DOMAIN:http://127.0.0.1:8889/file/}
+        base-path: local-plus/
+        path-patterns: /file/**
+        storage-path: ${STORAGE_PATH:D:/Temp/note_dev_uploads/}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: ${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key: ${AI_API_KEY:sk-xxxxxx}
+      model-name: ${AI_CHAT_MODEL:qwen-plus}
+      log-requests: true
+      log-responses: true
+    streaming-chat-model:
+      base-url: ${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key: ${AI_API_KEY:sk-xxxxxx}
+      model-name: ${AI_CHAT_MODEL:qwen-plus}
+      log-requests: true
+      log-responses: true
+    embedding-model:
+      base-url: ${AI_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key: ${AI_API_KEY:sk-xxxxxx}
+      model-name: ${AI_EMBEDDING_MODEL:text-embedding-v3}
+      log-requests: true
+      log-responses: true
+      max-segments-per-batch: 10
+
+async:
+  executor:
+    core-pool-size: 8
+    max-pool-size: 16
+    queue-capacity: 200
+    thread-name-prefix: "Async-Chat-"
+    keep-alive-seconds: 60
+
+chat:
+  stream:
+    base-delay-ms: 50
+    max-delay-ms: 200
+    chunk-size-threshold: 10
+    rate-limit-window: 20
+    window-delay-ms: 10
+    backpressure-buffer-size: 100
+    content-delay-factor: 2.0
+    index-delay-reduction: 5
+    enable-rate-control: true
+    enable-adaptive-delay: true
+    enable-smooth-transmission: true
+    enable-logging: false
